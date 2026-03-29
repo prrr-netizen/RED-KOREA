@@ -1,0 +1,9 @@
+flask
+flask-apscheduler
+flask-paginate
+discord-webhook
+twilio
+babel
+websocket-client
+requests
+python-dotenv
