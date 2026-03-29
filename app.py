@@ -1,14 +1,35 @@
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request, jsonify
+import sqlite3, os
 
 app = Flask(__name__)
 
+# ===== 주문 DB 설정 =====
+DB_PATH = os.path.join(os.path.dirname(__file__), "orders.db")
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_name TEXT,
+            price INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ===== 메인 화면 =====
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>ModernStore | 감각적인 온라인 샵</title>
+    <title>RED | 온라인 샵</title>
     <!-- Google Fonts & Font Awesome -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -261,7 +282,7 @@ index_html = """
 </section>
 
 <div class="footer">
-    <p>&copy; 2025 MODERNSTORE | 연습용 판매 사이트 (데모) | 실제 결제는 이루어지지 않습니다.</p>
+    <p>&copy; 2026 RED</p>
 </div>
 
 <div id="toastMsg" class="toast">🛍️ 장바구니에 담았습니다</div>
@@ -326,10 +347,22 @@ index_html = """
         }, 2000);
     }
 
-    // 구매(담기) 버튼 핸들러 (데모: alert 대신 토스트)
-    function handleBuy(productName, price) {
-        // 실제로는 장바구니 연동 등이 들어갑니다. 여기서는 판매 데모 알림
+    async function handleBuy(productName, price) {
         showToast(`✅ ${productName} - ${price.toLocaleString()}원 담기 완료 (데모)`);
+
+        try {
+            await fetch("/api/buy", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: productName,
+                    price: price
+                })
+            });
+        } catch (e) {
+            console.error(e);
+        }
+
         console.log(`[구매시뮬] 상품: ${productName}, 가격: ${price}`);
     }
 
@@ -339,27 +372,26 @@ index_html = """
         products.forEach(product => {
             const card = document.createElement('div');
             card.className = 'product-card';
-            
-            // 이미지 영역 (아이콘+배경)
+
             const imgDiv = document.createElement('div');
             imgDiv.className = 'product-img';
             imgDiv.innerHTML = `<span style="font-size: 4rem;">${product.emoji}</span>`;
-            
+
             const infoDiv = document.createElement('div');
             infoDiv.className = 'product-info';
-            
+
             const title = document.createElement('div');
             title.className = 'product-title';
             title.innerText = product.name;
-            
+
             const price = document.createElement('div');
             price.className = 'product-price';
             price.innerText = `${product.price.toLocaleString()}원`;
-            
+
             const desc = document.createElement('div');
             desc.className = 'product-desc';
             desc.innerText = product.desc;
-            
+
             const btn = document.createElement('button');
             btn.className = 'buy-btn';
             btn.innerHTML = '<i class="fas fa-shopping-cart"></i> 바로 구매하기';
@@ -367,22 +399,21 @@ index_html = """
                 e.stopPropagation();
                 handleBuy(product.name, product.price);
             });
-            
+
             infoDiv.appendChild(title);
             infoDiv.appendChild(price);
             infoDiv.appendChild(desc);
             infoDiv.appendChild(btn);
-            
+
             card.appendChild(imgDiv);
             card.appendChild(infoDiv);
-            
-            // 카드 전체 클릭시에도 구매 동작 (편의)
+
             card.addEventListener('click', (e) => {
                 if(e.target !== btn && !btn.contains(e.target)) {
                     handleBuy(product.name, product.price);
                 }
             });
-            
+
             productGrid.appendChild(card);
         });
     }
@@ -396,6 +427,27 @@ index_html = """
 @app.route("/")
 def index():
     return render_template_string(index_html)
+
+# 주문 기록 받는 API
+@app.route("/api/buy", methods=["POST"])
+def api_buy():
+    data = request.get_json()
+    name = data.get("name")
+    price = data.get("price")
+
+    if not name or price is None:
+        return jsonify({"ok": False, "error": "invalid data"}), 400
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO orders (product_name, price) VALUES (?, ?)",
+        (name, int(price)),
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({"ok": True})
 
 if __name__ == "__main__":
     app.run(debug=True)
