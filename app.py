@@ -1,11 +1,21 @@
-from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
-import sqlite3, os
+import os
+import sqlite3
+from flask import (
+    Flask,
+    render_template_string,
+    request,
+    jsonify,
+    redirect,
+    url_for,
+    session,
+)
 
 app = Flask(__name__)
-app.secret_key = "change-this-secret-key"  # 길게 랜덤 문자열로 바꿔 써
 
+# 환경변수에서 비밀 키/관리자 비번 가져오기 (깃허브에는 값이 안 올라감)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "red1234"  # 원하는 비번으로 바꿔 써
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "dev-pass-change")
 
 # ===== DB 설정 =====
 DB_PATH = os.path.join(os.path.dirname(__file__), "shop.db")
@@ -15,31 +25,39 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             points INTEGER DEFAULT 0
         )
-    """)
+        """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             product_name TEXT,
             price INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY,
             charge_url TEXT
         )
-    """)
+        """
+    )
 
     cur.execute("INSERT OR IGNORE INTO users (id, points) VALUES (1, 0)")
-    cur.execute("INSERT OR IGNORE INTO settings (id, charge_url) VALUES (1, 'https://example.com/charge')")
+    cur.execute(
+        "INSERT OR IGNORE INTO settings (id, charge_url) VALUES (1, 'https://example.com/charge')"
+    )
 
     conn.commit()
     conn.close()
@@ -434,7 +452,6 @@ def api_buy():
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-
     cur.execute("SELECT points FROM users WHERE id = 1")
     row = cur.fetchone()
     points = row[0] if row else 0
@@ -600,12 +617,11 @@ def admin():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT charge_url FROM settings WHERE id = 1")
-    row = conn.cursor().fetchone()
-    conn.close()
+    row = cur.fetchone()
     charge_url = row[0] if row and row[0] else ""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("SELECT id, product_name, price, created_at FROM orders ORDER BY id DESC LIMIT 20")
+    cur.execute(
+        "SELECT id, product_name, price, created_at FROM orders ORDER BY id DESC LIMIT 20"
+    )
     orders = cur.fetchall()
     conn.close()
     return rts(admin_html, charge_url=charge_url, orders=orders)
