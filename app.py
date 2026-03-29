@@ -1,16 +1,20 @@
-from flask import Flask, render_template_string, request, jsonify, redirect
+from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 import sqlite3, os
 
 app = Flask(__name__)
+app.secret_key = "change-this-secret-key"  # 길게 랜덤 문자열로 바꿔 써
+
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "red1234"  # 원하는 비번으로 바꿔 써
 
 # ===== DB 설정 =====
 DB_PATH = os.path.join(os.path.dirname(__file__), "shop.db")
+
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # 유저 포인트 (한 명만 쓴다는 가정: id=1)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
@@ -18,7 +22,6 @@ def init_db():
         )
     """)
 
-    # 주문 기록
     cur.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +31,6 @@ def init_db():
         )
     """)
 
-    # 충전 수단 URL (예: 토스, 카카오페이 페이지 링크)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY,
@@ -36,16 +38,29 @@ def init_db():
         )
     """)
 
-    # 기본 데이터 세팅
     cur.execute("INSERT OR IGNORE INTO users (id, points) VALUES (1, 0)")
     cur.execute("INSERT OR IGNORE INTO settings (id, charge_url) VALUES (1, 'https://example.com/charge')")
 
     conn.commit()
     conn.close()
 
+
 init_db()
 
-# ===== 메인 화면 (유저 측) =====
+
+def login_required(f):
+    from functools import wraps
+
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not session.get("admin_logged_in"):
+            return redirect(url_for("admin_login"))
+        return f(*args, **kwargs)
+
+    return wrapper
+
+
+# ===== 메인 화면 =====
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -389,11 +404,12 @@ index_html = """
 </html>
 """
 
+
 @app.route("/")
 def index():
     return render_template_string(index_html)
 
-# 현재 포인트 조회
+
 @app.route("/api/points")
 def api_points():
     conn = sqlite3.connect(DB_PATH)
@@ -404,7 +420,7 @@ def api_points():
     points = row[0] if row else 0
     return jsonify({"points": points})
 
-# 구매 처리: 포인트 차감 + 주문 기록
+
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
     data = request.get_json()
@@ -419,7 +435,6 @@ def api_buy():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
 
-    # 현재 포인트 확인
     cur.execute("SELECT points FROM users WHERE id = 1")
     row = cur.fetchone()
     points = row[0] if row else 0
@@ -428,7 +443,6 @@ def api_buy():
         conn.close()
         return jsonify({"ok": False, "error": "포인트가 부족합니다"}), 400
 
-    # 포인트 차감 + 주문 기록
     cur.execute("UPDATE users SET points = points - ? WHERE id = 1", (price,))
     cur.execute(
         "INSERT INTO orders (product_name, price) VALUES (?, ?)",
@@ -439,7 +453,7 @@ def api_buy():
 
     return jsonify({"ok": True})
 
-# 충전하기 버튼이 이동할 URL 반환
+
 @app.route("/api/charge-url")
 def api_charge_url():
     conn = sqlite3.connect(DB_PATH)
@@ -450,7 +464,7 @@ def api_charge_url():
     url = row[0] if row and row[0] else "https://example.com/charge"
     return jsonify({"url": url})
 
-# ===== 간단 어드민 페이지 (/admin) =====
+
 admin_html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -467,10 +481,12 @@ admin_html = """
         table { border-collapse: collapse; width:100%; max-width:800px; margin-top:1rem; font-size:0.9rem; }
         th, td { border:1px solid #444; padding:0.4rem 0.6rem; }
         th { background:#222; }
+        a { color:#4fc3f7; }
     </style>
 </head>
 <body>
     <h1>RED Admin</h1>
+    <p><a href="/admin/logout">로그아웃</a></p>
 
     <section>
         <h2>1. 유저 포인트 수동 설정</h2>
@@ -518,21 +534,85 @@ admin_html = """
 </html>
 """
 
+
+login_html = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>RED Admin Login</title>
+    <style>
+        body { font-family: sans-serif; background:#111; color:#eee; display:flex; justify-content:center; align-items:center; height:100vh; }
+        .box { background:#1b1b1b; padding:20px 24px; border-radius:8px; width:260px; }
+        h1 { font-size:1.2rem; margin-bottom:1rem; }
+        label { display:block; margin-top:0.5rem; font-size:0.85rem; }
+        input[type="text"], input[type="password"] { width:100%; padding:0.4rem; margin-top:0.2rem; border-radius:4px; border:1px solid #444; background:#000; color:#eee; }
+        button { margin-top:0.8rem; width:100%; padding:0.4rem; cursor:pointer; background:#e53935; border:none; color:#fff; border-radius:4px; font-weight:600; }
+        .error { color:#ff6666; font-size:0.8rem; margin-top:0.5rem; }
+        a { color:#4fc3f7; font-size:0.8rem; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>RED Admin</h1>
+        <form method="post">
+            <label>아이디</label>
+            <input type="text" name="username" autocomplete="off">
+            <label>비밀번호</label>
+            <input type="password" name="password" autocomplete="off">
+            <button type="submit">로그인</button>
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+        </form>
+        <p><a href="/">← 메인으로</a></p>
+    </div>
+</body>
+</html>
+"""
+
 from flask import render_template_string as rts
 
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+            session["admin_logged_in"] = True
+            return redirect(url_for("admin"))
+        else:
+            error = "아이디 또는 비밀번호가 올바르지 않습니다."
+    return rts(login_html, error=error)
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin_logged_in", None)
+    return redirect(url_for("admin_login"))
+
+
 @app.route("/admin")
+@login_required
 def admin():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT charge_url FROM settings WHERE id = 1")
-    row = cur.fetchone()
+    row = conn.cursor().fetchone()
+    conn.close()
     charge_url = row[0] if row and row[0] else ""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
     cur.execute("SELECT id, product_name, price, created_at FROM orders ORDER BY id DESC LIMIT 20")
     orders = cur.fetchall()
     conn.close()
     return rts(admin_html, charge_url=charge_url, orders=orders)
 
+
 @app.route("/admin/set-points", methods=["POST"])
+@login_required
 def admin_set_points():
     points = request.form.get("points", "").strip()
     try:
@@ -546,7 +626,9 @@ def admin_set_points():
     conn.close()
     return redirect("/admin")
 
+
 @app.route("/admin/set-charge-url", methods=["POST"])
+@login_required
 def admin_set_charge_url():
     url = request.form.get("url", "").strip()
     conn = sqlite3.connect(DB_PATH)
@@ -555,6 +637,7 @@ def admin_set_charge_url():
     conn.commit()
     conn.close()
     return redirect("/admin")
+
 
 if __name__ == "__main__":
     app.run(debug=True)
