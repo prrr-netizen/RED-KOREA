@@ -852,7 +852,7 @@ def sms_verify(name):
                                 gegesgseg = 1
                              if (getrank == 0):
                                  nonBuy = i[4]
-                                if (nonBuy == 1):
+                                 if (nonBuy == 1):
                                     gegesgseg = 1
                                 else:
                                     gegesgseg = 0     
