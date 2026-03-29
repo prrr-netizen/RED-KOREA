@@ -848,15 +848,15 @@ def sms_verify(name):
                         links = []
                         for i in link:
                             getrank = user_info[8]
-                            if(getrank == 6 or getrank == 7):
+                            if (getrank == 6 or getrank == 7):
                                 gegesgseg = 1
-                            if(getrank == 0):
+                             if (getrank == 0):
                                  nonBuy = i[4]
-                                if(nonBuy == 1):
+                                if (nonBuy == 1):
                                     gegesgseg = 1
                                 else:
                                     gegesgseg = 0     
-                            if(getrank == 1):
+                            if (getrank == 1):
                                 nonBuy = i[4]
                                 if(nonBuy == 1):
                                     gegesgseg = 1
