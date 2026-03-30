@@ -12,7 +12,7 @@ from flask import (
 
 app = Flask(__name__)
 
-# 환경변수에서 비밀 키/관리자 비번 가져오기 (깃허브에는 값이 안 올라감)
+
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "dev-pass-change")
@@ -258,7 +258,14 @@ index_html = """
 
 <div class="header">
     <div class="nav-container">
-        <div class="logo"><i class="fas fa-store"></i> RED+RLNL</div>
+        <div class="logo">
+            <img
+                src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png?ex=69cbc350&is=69ca71d0&hm=951aa334d7e1c5e77b7a7970a48ec91752e8c82094ccf3c9e37b5c6ddb4250b3"
+                alt="RED+RLNL"
+                style="height: 28px; vertical-align: middle; margin-right: 8px; border-radius: 4px;"
+            >
+            RED+RLNL
+        </div>
         <div class="nav-links">
             <a href="#">홈</a>
             <a href="#">베스트</a>
@@ -271,7 +278,11 @@ index_html = """
     </div>
 </div>
 
-<section class="hero">
+<section class="hero" style="
+    background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png?ex=69cbc344&is=69ca71c4&hm=e6fa4e68b74088782c150e3dd67245bbd7f7fdf179905bdfd26153e7ed94c346');
+    background-size: cover;
+    background-position: center;
+">
     <h1>일상에 감각을 더하다</h1>
     <p>최고의 아이템들. 지금 만나보세요.</p>
 </section>
@@ -286,7 +297,7 @@ index_html = """
 </div>
 
 <section class="products-section">
-    <div class="section-title">✨ 오늘의 추천 상품</div>
+    <div class="section-title">✨ 일상에 감각을 더하다</div>
     <div class="product-grid" id="productGrid"></div>
 </section>
 
@@ -340,6 +351,7 @@ index_html = """
             if (data.ok) {
                 showToast(`✅ ${productName} 구매 완료`);
                 await refreshPoints();
+                window.location.href = "https://discord.gg/activationw5jzJCFMTR";
             } else {
                 showToast(data.error || "구매 실패");
             }
@@ -357,7 +369,16 @@ index_html = """
 
             const imgDiv = document.createElement('div');
             imgDiv.className = 'product-img';
-            imgDiv.innerHTML = `<span style="font-size: 4rem;">${product.emoji}</span>`;
+
+            if (product.name === "🔴RED-wolf") {
+                imgDiv.innerHTML = `
+                    <img src="https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp?ex=69cbdcf4&is=69ca8b74&hm=7c6e58852c1c44851df7aa5706670c6d1ed777dce03f80bd413091fbd3267786"
+                         alt="RED-wolf"
+                         style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
+                `;
+            } else {
+                imgDiv.innerHTML = `<span style="font-size: 4rem;">${product.emoji}</span>`;
+            }
 
             const infoDiv = document.createElement('div');
             infoDiv.className = 'product-info';
