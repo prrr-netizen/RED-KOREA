@@ -3,7 +3,7 @@ import sqlite3
 import requests
 from flask import (
     Flask,
-    render_template_string,
+    render_template_string as rts,
     request,
     jsonify,
     redirect,
@@ -13,14 +13,12 @@ from flask import (
 
 app = Flask(__name__)
 
+# 기본 설정
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "dev-pass-change")
 
-
 WEBHOOK_URL = "https://discord.com/api/webhooks/1488231305396224041/Fa_z7Wihwf9-k79aGNcvaLNj3emxWYxlFoD6xVGkgLxzZKig3Uc7MQpL8Nk93d4Pyfat"
-
-
 DB_PATH = os.path.join(os.path.dirname(__file__), "shop.db")
 
 
@@ -36,7 +34,6 @@ def init_db():
         )
         """
     )
-
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS orders (
@@ -47,7 +44,6 @@ def init_db():
         )
         """
     )
-
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS settings (
@@ -56,7 +52,6 @@ def init_db():
         )
         """
     )
-
     cur.execute(
         "INSERT OR IGNORE INTO settings (id, charge_url) VALUES (1, 'https://discord.gg/q6nJpYuFB8')"
     )
@@ -88,8 +83,8 @@ index_html = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>RED | 온라인 샵</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    //fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    //cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #fafaf8; color: #1c1c1c; line-height: 1.5; }
@@ -149,7 +144,7 @@ index_html = """
             max-width: 1280px;
             margin: 0 auto;
             height: 260px;
-            background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png?ex=69cbc344&is=69ca71c4&hm=e6fa4e68b74088782c150e3dd67245bbd7f7fdf179905bdfd26153e7ed94c346');
+            background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png');
             background-size: cover;
             background-position: center;
             border-radius: 0 0 24px 24px;
@@ -244,6 +239,10 @@ index_html = """
             justify-content: center;
             font-size: 4rem;
             color: #7c6e65;
+            transition: transform 0.4s ease;
+        }
+        .product-card:hover .product-img {
+            transform: scale(1.03);
         }
         .product-info { padding: 1.5rem; }
         .product-title { font-weight: 700; font-size: 1.25rem; margin-bottom: 0.5rem; }
@@ -309,7 +308,7 @@ index_html = """
     <div class="nav-container">
         <div class="logo">
             <img
-                src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png?ex=69cbc350&is=69ca71d0&hm=951aa334d7e1c5e77b7a7970a48ec91752e8c82094ccf3c9e37b5c6ddb4250b3"
+                src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png"
                 alt="RED+RLNL"
                 style="height: 26px; border-radius: 4px;"
             >
@@ -428,13 +427,13 @@ index_html = """
 
             if (product.name === "🔴RED-𝗪𝗢𝗟𝗙") {
                 imgDiv.innerHTML = `
-                    <img src="https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp?ex=69cbdcf4&is=69ca8b74&hm=7c6e58852c1c44851df7aa5706670c6d1ed777dce03f80bd413091fbd3267786"
+                    <img src="https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp"
                          alt="RED-wolf"
                          style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
                 `;
             } else if (product.name === "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘") {
                 imgDiv.innerHTML = `
-                    <img src="https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png?ex=69cbc915&is=69ca7795&hm=584c44535dd2b20996264d09dc9462c4cab828df89036640dc1fa1aaa0c0017a"
+                    <img src="https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png"
                          alt="RED-WOLF-LITE"
                          style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
                 `;
@@ -507,7 +506,7 @@ index_html = """
 
 @app.route("/")
 def index():
-    return render_template_string(index_html)
+    return rts(index_html)
 
 
 @app.route("/api/points")
@@ -598,9 +597,9 @@ admin_html = """
     <section>
         <h2>1. 유저 포인트 수동 설정</h2>
         <form method="post" action="/admin/set-points">
-            <label>디스코드 유저 ID:</label>
+            abel>디스코드 유저 ID:</label>
             <input type="text" name="user_id" placeholder="예: 123456789012345678">
-            <label>포인트 값:</label>
+            abel>포인트 값:</label>
             <input type="text" name="points" placeholder="예: 100000">
             <button type="submit">저장</button>
         </form>
@@ -609,7 +608,7 @@ admin_html = """
     <section>
         <h2>2. 충전하기 버튼 URL 설정</h2>
         <form method="post" action="/admin/set-charge-url">
-            <label>충전 페이지 URL:</label>
+            abel>충전 페이지 URL:</label>
             <input type="text" name="url" placeholder="https://...">
             <button type="submit">저장</button>
         </form>
@@ -665,9 +664,9 @@ login_html = """
     <div class="box">
         <h1>RED Admin</h1>
         <form method="post">
-            <label>아이디</label>
+            abel>아이디</label>
             <input type="text" name="username" autocomplete="off">
-            <label>비밀번호</label>
+            abel>비밀번호</label>
             <input type="password" name="password" autocomplete="off">
             <button type="submit">로그인</button>
             {% if error %}
@@ -679,8 +678,6 @@ login_html = """
 </body>
 </html>
 """
-
-from flask import render_template_string as rts
 
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -741,9 +738,11 @@ def admin_set_points():
     conn.commit()
     conn.close()
 
-    
     try:
-        content = f"<@{user_id}> 님 포인트가 {value:,}P 로 설정되었습니다."
+        content = (
+            f"<@{user_id}> 님 포인트가 {value:,}P 로 설정되었습니다.\n"
+            "티켓 문의 후 충전 요청하신 건에 대해, 입금 확인 및 관리자 확정 처리 완료되었습니다."
+        )
         requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
     except Exception as e:
         print("WEBHOOK ERROR:", e)
@@ -764,4 +763,5 @@ def admin_set_charge_url():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # 로컬 개발용. 실제 배포(리전/플랫폼)에서는 WSGI 서버(gunicorn 등)에서 app만 import해서 사용.
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
