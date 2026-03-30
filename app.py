@@ -75,7 +75,7 @@ def login_required(f):
     return wrapper
 
 
-# ===== 메인 화면 (최종판: 공지 마퀴 + 개성 있는 디자인) =====
+# ===== 메인 화면 (최종판: 로고 이미지 제거 + 상품 이미지 수정) =====
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -118,17 +118,6 @@ index_html = """
             align-items: center;
             flex-wrap: wrap;
             gap: 1rem;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-        }
-
-        .logo img {
-            height: 32px;
-            filter: drop-shadow(0 0 6px rgba(255, 75, 110, 0.4));
         }
 
         .logo-text {
@@ -450,10 +439,7 @@ index_html = """
 
 <div class="header">
     <div class="nav-container">
-        <div class="logo">
-            <img src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png" alt="RED">
-            <span class="logo-text">RED+RLNL</span>
-        </div>
+        <div class="logo-text">RED+RLNL</div>
         <div class="right-area">
             <div class="points-badge">
                 <i class="fas fa-coins"></i> <span id="pointsText">0</span> P
@@ -469,13 +455,13 @@ index_html = """
 <!-- 공지 마퀴 (롤링 배너) -->
 <div class="notice-bar">
     <div class="notice-track">
-        <span class="notice-item"><i class="fas fa-fire"></i> <strong>HOT</strong>오픈 기념</span>
+        <span class="notice-item"><i class="fas fa-fire"></i> <strong>HOT</strong> 오픈 기념</span>
         <span class="notice-item"><i class="fas fa-gift"></i> 언제든지 문의 환영 <strong>고객 응대</strong> 신속 정확</span>
         <span class="notice-item"><i class="fas fa-headset"></i> 문의는 디스코드 채널에서 24시간 응대</span>
         <span class="notice-item"><i class="fas fa-charging-station"></i> 충전 5만원 이상 시 <strong>보너스 20%</strong> 적립</span>
         <!-- 복제본 (무한 롤링) -->
         <span class="notice-item"><i class="fas fa-fire"></i> <strong>HOT</strong> 3월 한정 특가! 전 상품 10% 추가 할인</span>
-        <span class="notice-item"><i class="fas fa-gift"></i> 신규 회원 가입 시 <strong>5,000P</strong> 즉시 지급</span>
+        <span class="notice-item"><i class="fas fa-gift"></i> 신규 회원 가입 <strong>대환영</strong> 타르코프</span>
         <span class="notice-item"><i class="fas fa-headset"></i> 문의는 디스코드 채널에서 24시간 응대</span>
         <span class="notice-item"><i class="fas fa-charging-station"></i> 충전 5만원 이상 시 <strong>보너스 20%</strong> 적립</span>
     </div>
@@ -497,13 +483,30 @@ index_html = """
 <div id="toastMsg" class="toast"></div>
 
 <script>
+    // 상품 데이터 (모든 상품에 이미지 URL 추가)
     const products = [
-        { id: 1, name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", price: 13000, desc: "라이트 버전으로 부담 없이 경험해보는 패키지", emoji: "🏋️", img: null },
-        { id: 2, name: "🔴RED-𝗪𝗢𝗟𝗙",         price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺", img: "https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp" },
-        { id: 3, name: "🔴RED-kd-dropper",      price: 7000,  desc: "집중력과 몰입감을 높여주는 트레이닝 패키지", emoji: "🎯", img: null }
+        { 
+            id: 1, 
+            name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", 
+            price: 13000, 
+            desc: "라이트 버전으로 부담 없이 경험해보는 패키지",
+            img: "https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png"
+        },
+        { 
+            id: 2, 
+            name: "🔴RED-𝗪𝗢𝗟𝗙", 
+            price: 13000, 
+            desc: "공격적인 운영을 위한 하이레벨 패키지",
+            img: "https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp"
+        },
+        { 
+            id: 3, 
+            name: "🔴RED-kd-dropper", 
+            price: 7000, 
+            desc: "집중력과 몰입감을 높여주는 트레이닝 패키지",
+            img: "https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png"  // 예시 이미지, 실제 원하시는 이미지로 교체 가능
+        }
     ];
-    // 라이트 버전 이미지 별도 처리
-    const liteImg = "https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png";
 
     const productGrid = document.getElementById('productGrid');
     const toastEl = document.getElementById('toastMsg');
@@ -572,12 +575,12 @@ index_html = """
             const imgDiv = document.createElement('div');
             imgDiv.className = 'product-img';
 
-            if (product.name === "🔴RED-𝗪𝗢𝗟𝗙" && product.img) {
-                imgDiv.innerHTML = `<img src="${product.img}" alt="RED-wolf">`;
-            } else if (product.name === "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘") {
-                imgDiv.innerHTML = `<img src="${liteImg}" alt="RED-WOLF-LITE">`;
+            // 이미지가 있으면 이미지 표시, 없으면 이모지
+            if (product.img) {
+                imgDiv.innerHTML = `<img src="${product.img}" alt="${product.name}">`;
             } else {
-                imgDiv.innerHTML = `<span style="font-size: 4rem;">${product.emoji}</span>`;
+                // 기본 이모지 (만약 이미지 누락 시)
+                imgDiv.innerHTML = `<span style="font-size: 4rem;">🛒</span>`;
             }
 
             const infoDiv = document.createElement('div');
@@ -756,7 +759,7 @@ admin_html = """
 
     <section>
         <h2>3. 최근 주문 20개</h2>
-         <table>
+         2<table>
             <thead>
                  <tr>
                     <th>ID</th>
