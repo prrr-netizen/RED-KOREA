@@ -75,30 +75,41 @@ def login_required(f):
     return wrapper
 
 
-# ===== 메인 화면 =====
+# ===== 메인 화면 (최종판: 공지 마퀴 + 개성 있는 디자인) =====
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>RED | 온라인 샵</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <title>RED | 프리미엄 온라인 샵</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        body { background-color: #fafaf8; color: #1c1c1c; line-height: 1.5; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
 
+        body {
+            background: #0a0a0c;
+            color: #ededee;
+            line-height: 1.5;
+        }
+
+        /* 헤더 */
         .header {
-            background-color: #ffffff;
-            border-bottom: 1px solid #eaeaea;
+            background: rgba(10, 10, 12, 0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             padding: 1rem 2rem;
             position: sticky;
             top: 0;
             z-index: 100;
-            backdrop-filter: blur(8px);
-            background-color: rgba(255, 255, 255, 0.95);
         }
+
         .nav-container {
             max-width: 1280px;
             margin: 0 auto;
@@ -106,156 +117,267 @@ index_html = """
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
+            gap: 1rem;
         }
+
         .logo {
-            font-size: 1.6rem;
-            font-weight: 700;
-            letter-spacing: -0.3px;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.6rem;
         }
+
+        .logo img {
+            height: 32px;
+            filter: drop-shadow(0 0 6px rgba(255, 75, 110, 0.4));
+        }
+
         .logo-text {
-            background: linear-gradient(135deg, #2b2d42, #4a4e69);
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ff4b6e, #ff8c42);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        /* 우측 영역 (포인트 + 액션) */
+        .right-area {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .points-badge {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(4px);
+            padding: 0.45rem 1rem;
+            border-radius: 60px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255, 75, 110, 0.3);
+            transition: all 0.2s;
+        }
+
+        .points-badge i {
+            color: #ffb347;
+            margin-right: 0.4rem;
+        }
+
+        .points-badge span {
+            color: #ffb347;
+            font-weight: 800;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.8rem;
+        }
+
+        .discord-btn {
+            background: #5865f2;
+            color: white;
+            padding: 0.45rem 1.1rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .discord-btn:hover {
+            background: #4752c4;
+            transform: translateY(-2px);
+        }
+
+        .charge-btn {
+            background: linear-gradient(135deg, #ff4b6e, #ff6b4a);
+            color: white;
+            border: none;
+            padding: 0.45rem 1.2rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            box-shadow: 0 4px 12px rgba(255, 75, 110, 0.3);
+        }
+
+        .charge-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 75, 110, 0.4);
+        }
+
+        /* 공지 마퀴 (CSS 롤링) */
+        .notice-bar {
+            background: linear-gradient(90deg, #1e1a2f, #2a1e2c, #1e1a2f);
+            border-bottom: 1px solid rgba(255, 75, 110, 0.3);
+            border-top: 1px solid rgba(255, 75, 110, 0.2);
+            padding: 0.7rem 0;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .notice-track {
+            display: inline-block;
+            animation: scrollNotice 25s linear infinite;
+        }
+
+        .notice-item {
+            display: inline-block;
+            padding: 0 2rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .notice-item i {
+            color: #ff4b6e;
+            margin-right: 0.5rem;
+        }
+
+        .notice-item strong {
+            color: #ffb347;
+        }
+
+        @keyframes scrollNotice {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* 히어로 */
+        .hero {
+            background: #000;
+            padding: 0;
+        }
+
+        .hero-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            height: 280px;
+            background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png');
+            background-size: cover;
+            background-position: center 30%;
+            border-radius: 0 0 32px 32px;
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+
+        /* 상품 섹션 */
+        .products-section {
+            max-width: 1280px;
+            margin: 3rem auto;
+            padding: 0 2rem;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 2.5rem;
+            position: relative;
+            display: inline-block;
+            background: linear-gradient(135deg, #fff, #ffb347);
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
         }
-        .nav-links { display: flex; gap: 1.2rem; align-items: center; }
-        .nav-links a { text-decoration: none; color: #2d2f36; font-weight: 500; transition: 0.2s; font-size: 0.9rem; }
-        .nav-links a:hover { color: #8b5f6c; }
-        .cart-icon { position: relative; font-size: 1.4rem; }
 
-        .discord-btn {
-            padding: 0.35rem 0.9rem;
-            border-radius: 999px;
-            background:#5865F2;
-            color:#fff;
-            font-size:0.8rem;
-            font-weight:600;
-        }
-
-        .hero {
-            background: #000;
-            padding: 0;
-            border-bottom: 1px solid #ddd8c8;
-        }
-        .hero-inner {
-            max-width: 1280px;
-            margin: 0 auto;
-            height: 260px;
-            background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png');
-            background-size: cover;
-            background-position: center;
-            border-radius: 0 0 24px 24px;
-        }
-
-        .info-bar {
-            max-width: 1280px;
-            margin: 1.5rem auto 0;
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        .info-bar-left { font-size: 0.95rem; color: #555; }
-        .info-bar-right button {
-            background: #ff4b6e;
-            color: white;
-            border: none;
-            padding: 0.7rem 1.3rem;
-            border-radius: 999px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 8px 18px rgba(255, 75, 110, 0.35);
-            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-        }
-        .info-bar-right button:hover {
-            background: #ff1f50;
-            transform: translateY(-1px);
-            box-shadow: 0 12px 24px rgba(255, 75, 110, 0.45);
-        }
-        .info-bar-right button:active {
-            transform: translateY(0);
-            box-shadow: 0 6px 14px rgba(255, 75, 110, 0.3);
-        }
-
-        .products-section {
-            max-width: 1280px;
-            margin: 2.5rem auto;
-            padding: 0 2rem;
-        }
-        .section-title {
-            font-size: 1.6rem;
-            font-weight: 600;
-            margin-bottom: 2rem;
-            position: relative;
-            display: inline-block;
-            padding-bottom: 4px;
-        }
-        .section-title::after {
+        /* 그래뉼라 애니메이션 (입자 효과) */
+        .section-title::before {
             content: "";
             position: absolute;
+            bottom: -8px;
             left: 0;
-            bottom: 0;
+            width: 100%;
             height: 3px;
-            width: 0;
-            background: linear-gradient(90deg, #b5838d, #ff4b6e);
-            border-radius: 999px;
-            animation: section-underline 1s ease-out forwards;
+            background: linear-gradient(90deg, #ff4b6e, #ffb347);
+            border-radius: 4px;
+            animation: granularMove 2s ease-in-out infinite alternate;
         }
-        @keyframes section-underline {
-            from { width: 0; }
-            to { width: 100%; }
+
+        @keyframes granularMove {
+            0% { transform: scaleX(0.8); opacity: 0.6; }
+            100% { transform: scaleX(1); opacity: 1; }
         }
 
         .product-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 2rem;
         }
+
         .product-card {
-            background: white;
-            border-radius: 24px;
+            background: rgba(20, 20, 26, 0.7);
+            backdrop-filter: blur(8px);
+            border-radius: 28px;
             overflow: hidden;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.02), 0 6px 6px rgba(0, 0, 0, 0.03);
-            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
             cursor: pointer;
-            border: 1px solid #efefef;
         }
+
         .product-card:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 25px 30px -12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-8px) scale(1.01);
+            border-color: rgba(255, 75, 110, 0.5);
+            box-shadow: 0 20px 35px -12px rgba(255, 75, 110, 0.25);
         }
+
         .product-img {
             width: 100%;
-            height: 260px;
-            background-color: #f3f0ea;
+            height: 280px;
+            background: #111216;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 4rem;
-            color: #7c6e65;
             transition: transform 0.4s ease;
         }
+
         .product-card:hover .product-img {
-            transform: scale(1.03);
+            transform: scale(1.02);
         }
-        .product-info { padding: 1.5rem; }
-        .product-title { font-weight: 700; font-size: 1.25rem; margin-bottom: 0.5rem; }
-        .product-price { color: #b5838d; font-weight: 700; font-size: 1.3rem; margin: 0.5rem 0; }
-        .product-desc { color: #5a5e66; font-size: 0.85rem; margin-bottom: 1rem; }
+
+        .product-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .product-info {
+            padding: 1.6rem;
+        }
+
+        .product-title {
+            font-weight: 700;
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.3px;
+        }
+
+        .product-price {
+            color: #ff6b4a;
+            font-weight: 800;
+            font-size: 1.5rem;
+            margin: 0.6rem 0;
+        }
+
+        .product-desc {
+            color: #a0a0b0;
+            font-size: 0.85rem;
+            margin-bottom: 1.2rem;
+        }
+
         .buy-btn {
-            background: #1e2a2f;
+            background: linear-gradient(135deg, #ff4b6e, #ff6b4a);
             color: white;
             border: none;
-            padding: 0.7rem 1rem;
+            padding: 0.8rem;
             width: 100%;
             border-radius: 60px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: 0.2s;
             font-size: 0.9rem;
@@ -264,41 +386,63 @@ index_html = """
             justify-content: center;
             gap: 8px;
         }
-        .buy-btn:hover { background: #2e3e44; transform: scale(0.98); }
 
+        .buy-btn:hover {
+            opacity: 0.9;
+            transform: scale(0.98);
+        }
+
+        /* 토스트 */
         .toast {
             position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%) translateY(100px);
-            background: #1e2a2f;
-            color: #f5ebe0;
-            padding: 12px 24px;
+            background: #1e1a2f;
+            backdrop-filter: blur(12px);
+            color: #fff;
+            padding: 12px 28px;
             border-radius: 60px;
             font-weight: 500;
             font-size: 0.9rem;
             z-index: 1000;
             transition: transform 0.25s ease;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            pointer-events: none;
+            border: 1px solid rgba(255, 75, 110, 0.5);
             white-space: nowrap;
+            pointer-events: none;
         }
-        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
 
         .footer {
-            background: #1c1e24;
-            color: #bcbcbc;
+            background: #050507;
+            color: #6c6c7a;
             text-align: center;
             padding: 2rem;
             margin-top: 3rem;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
         }
 
-        @media (max-width: 640px) {
-            .nav-container { flex-direction: column; gap: 1rem; }
-            .nav-links { gap: 1.2rem; }
-            .info-bar { flex-direction: column; align-items: flex-start; }
-            .hero-inner { height: 200px; border-radius: 0; }
+        @media (max-width: 680px) {
+            .nav-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .right-area {
+                justify-content: space-between;
+            }
+            .notice-item {
+                font-size: 0.75rem;
+            }
+            .hero-inner {
+                height: 200px;
+            }
+            .product-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -307,23 +451,33 @@ index_html = """
 <div class="header">
     <div class="nav-container">
         <div class="logo">
-            <img
-                src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png"
-                alt="RED+RLNL"
-                style="height: 26px; border-radius: 4px;"
-            >
+            <img src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png" alt="RED">
             <span class="logo-text">RED+RLNL</span>
         </div>
-        <div class="nav-links">
-            <a href="#">홈</a>
-            <a href="#">베스트</a>
-            <a href="#">신상품</a>
-            <a href="#">컬렉션</a>
-            <div class="cart-icon">
-                <i class="fas fa-shopping-bag"></i>
+        <div class="right-area">
+            <div class="points-badge">
+                <i class="fas fa-coins"></i> <span id="pointsText">0</span> P
             </div>
-            <a href="https://discord.gg/q6nJpYuFB8" class="discord-btn">디스코드</a>
+            <div class="action-buttons">
+                <a href="https://discord.gg/q6nJpYuFB8" class="discord-btn"><i class="fab fa-discord"></i> 디스코드</a>
+                <button id="chargeBtn" class="charge-btn"><i class="fas fa-bolt"></i> 충전하기</button>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- 공지 마퀴 (롤링 배너) -->
+<div class="notice-bar">
+    <div class="notice-track">
+        <span class="notice-item"><i class="fas fa-fire"></i> <strong>HOT</strong>오픈 기념</span>
+        <span class="notice-item"><i class="fas fa-gift"></i> 언제든지 문의 환영 <strong>고객 응대</strong> 신속 정확</span>
+        <span class="notice-item"><i class="fas fa-headset"></i> 문의는 디스코드 채널에서 24시간 응대</span>
+        <span class="notice-item"><i class="fas fa-charging-station"></i> 충전 5만원 이상 시 <strong>보너스 20%</strong> 적립</span>
+        <!-- 복제본 (무한 롤링) -->
+        <span class="notice-item"><i class="fas fa-fire"></i> <strong>HOT</strong> 3월 한정 특가! 전 상품 10% 추가 할인</span>
+        <span class="notice-item"><i class="fas fa-gift"></i> 신규 회원 가입 시 <strong>5,000P</strong> 즉시 지급</span>
+        <span class="notice-item"><i class="fas fa-headset"></i> 문의는 디스코드 채널에서 24시간 응대</span>
+        <span class="notice-item"><i class="fas fa-charging-station"></i> 충전 5만원 이상 시 <strong>보너스 20%</strong> 적립</span>
     </div>
 </div>
 
@@ -331,32 +485,25 @@ index_html = """
     <div class="hero-inner"></div>
 </section>
 
-<div class="info-bar">
-    <div class="info-bar-left">
-        현재 포인트: <span id="pointsText">0</span> P
-    </div>
-    <div class="info-bar-right">
-        <button id="chargeBtn">충전하기</button>
-    </div>
-</div>
-
 <section class="products-section">
     <div class="section-title">✨ 오늘의 추천 상품</div>
     <div class="product-grid" id="productGrid"></div>
 </section>
 
 <div class="footer">
-    <p>&copy; 2026 RED</p>
+    <p>© 2026 RED | 프리미엄 서비스</p>
 </div>
 
 <div id="toastMsg" class="toast"></div>
 
 <script>
     const products = [
-        { id: 1, name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", price: 13000, desc: "라이트 버전으로 부담 없이 경험해보는 패키지", emoji: "🏋️" },
-        { id: 2, name: "🔴RED-𝗪𝗢𝗟𝗙",         price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺" },
-        { id: 3, name: "🔴RED-kd-dropper",      price: 7000,  desc: "집중력과 몰입감을 높여주는 트레이닝 패키지", emoji: "🎯" }
+        { id: 1, name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", price: 13000, desc: "라이트 버전으로 부담 없이 경험해보는 패키지", emoji: "🏋️", img: null },
+        { id: 2, name: "🔴RED-𝗪𝗢𝗟𝗙",         price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺", img: "https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp" },
+        { id: 3, name: "🔴RED-kd-dropper",      price: 7000,  desc: "집중력과 몰입감을 높여주는 트레이닝 패키지", emoji: "🎯", img: null }
     ];
+    // 라이트 버전 이미지 별도 처리
+    const liteImg = "https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png";
 
     const productGrid = document.getElementById('productGrid');
     const toastEl = document.getElementById('toastMsg');
@@ -425,18 +572,10 @@ index_html = """
             const imgDiv = document.createElement('div');
             imgDiv.className = 'product-img';
 
-            if (product.name === "🔴RED-𝗪𝗢𝗟𝗙") {
-                imgDiv.innerHTML = `
-                    <img src="https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp"
-                         alt="RED-wolf"
-                         style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
-                `;
+            if (product.name === "🔴RED-𝗪𝗢𝗟𝗙" && product.img) {
+                imgDiv.innerHTML = `<img src="${product.img}" alt="RED-wolf">`;
             } else if (product.name === "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘") {
-                imgDiv.innerHTML = `
-                    <img src="https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png"
-                         alt="RED-WOLF-LITE"
-                         style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
-                `;
+                imgDiv.innerHTML = `<img src="${liteImg}" alt="RED-WOLF-LITE">`;
             } else {
                 imgDiv.innerHTML = `<span style="font-size: 4rem;">${product.emoji}</span>`;
             }
@@ -617,26 +756,26 @@ admin_html = """
 
     <section>
         <h2>3. 최근 주문 20개</h2>
-        <table>
+         <table>
             <thead>
-                <tr>
+                 <tr>
                     <th>ID</th>
                     <th>상품명</th>
                     <th>가격</th>
                     <th>시간</th>
-                </tr>
+                 </tr>
             </thead>
             <tbody>
             {% for o in orders %}
-                <tr>
+                 <tr>
                     <td>{{ o[0] }}</td>
                     <td>{{ o[1] }}</td>
                     <td>{{ "{:,}".format(o[2]) }}원</td>
                     <td>{{ o[3] }}</td>
-                </tr>
+                 </tr>
             {% endfor %}
             </tbody>
-        </table>
+         </table>
     </section>
 </body>
 </html>
@@ -740,7 +879,7 @@ def admin_set_points():
 
     try:
         content = (
-            f"<@{user_id}> 님 포인트가 {value:,}P 로 설정되었습니다.\n"
+            f"<@{user_id}> 님 포인트가 {value:,}P 로 설정되었습니다.\\n"
             "티켓 문의 후 충전 요청하신 건에 대해, 입금 확인 및 관리자 확정 처리 완료되었습니다."
         )
         requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
@@ -763,5 +902,4 @@ def admin_set_charge_url():
 
 
 if __name__ == "__main__":
-    # 로컬 개발용. 실제 배포에서는 WSGI 서버(gunicorn 등)에서 app만 import해서 사용.
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
