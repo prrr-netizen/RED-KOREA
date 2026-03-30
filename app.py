@@ -490,21 +490,21 @@ index_html = """
             name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", 
             price: 13000, 
             desc: "라이트 버전으로 부담 없이 경험해보는 패키지",
-            img: "https://i.imgur.com/yw3kaeU.jpeg"
+            img: "https://i.imgur.com/Z3BhZ18.jpeg"
         },
         { 
             id: 2, 
             name: "🔴RED-𝗪𝗢𝗟𝗙", 
             price: 13000, 
             desc: "공격적인 운영을 위한 하이레벨 패키지",
-            img: "https://i.imgur.com/nlmQsz4.jpeg"
+            img: "https://i.imgur.com/0UBCMGR.jpeg"
         },
         { 
             id: 3, 
             name: "🔴RED-kd-dropper", 
             price: 7000, 
             desc: "집중력과 몰입감을 높여주는 트레이닝 패키지",
-            img: "https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png"  // 예시 이미지, 실제 원하시는 이미지로 교체 가능
+            img: "https://i.imgur.com/ApGpo16.jpeg"
         }
     ];
 
