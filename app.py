@@ -490,14 +490,14 @@ index_html = """
             name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", 
             price: 13000, 
             desc: "라이트 버전으로 부담 없이 경험해보는 패키지",
-            img: "https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png"
+            img: "https://i.imgur.com/yw3kaeU.jpeg"
         },
         { 
             id: 2, 
             name: "🔴RED-𝗪𝗢𝗟𝗙", 
             price: 13000, 
             desc: "공격적인 운영을 위한 하이레벨 패키지",
-            img: "https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp"
+            img: "https://i.imgur.com/nlmQsz4.jpeg"
         },
         { 
             id: 3, 
