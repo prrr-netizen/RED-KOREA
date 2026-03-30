@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import requests
 from flask import (
     Flask,
     render_template_string,
@@ -12,12 +13,14 @@ from flask import (
 
 app = Flask(__name__)
 
-
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "dev-pass-change")
 
-# ===== DB 설정 =====
+
+WEBHOOK_URL = "https://discord.com/api/webhooks/1488231305396224041/Fa_z7Wihwf9-k79aGNcvaLNj3emxWYxlFoD6xVGkgLxzZKig3Uc7MQpL8Nk93d4Pyfat"
+
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "shop.db")
 
 
@@ -54,9 +57,8 @@ def init_db():
         """
     )
 
-    cur.execute("INSERT OR IGNORE INTO users (id, points) VALUES (1, 0)")
     cur.execute(
-        "INSERT OR IGNORE INTO settings (id, charge_url) VALUES (1, 'https://example.com/charge')"
+        "INSERT OR IGNORE INTO settings (id, charge_url) VALUES (1, 'https://discord.gg/q6nJpYuFB8')"
     )
 
     conn.commit()
@@ -124,10 +126,19 @@ index_html = """
             background-clip: text;
             color: transparent;
         }
-        .nav-links { display: flex; gap: 2rem; align-items: center; }
-        .nav-links a { text-decoration: none; color: #2d2f36; font-weight: 500; transition: 0.2s; }
+        .nav-links { display: flex; gap: 1.2rem; align-items: center; }
+        .nav-links a { text-decoration: none; color: #2d2f36; font-weight: 500; transition: 0.2s; font-size: 0.9rem; }
         .nav-links a:hover { color: #8b5f6c; }
         .cart-icon { position: relative; font-size: 1.4rem; }
+
+        .discord-btn {
+            padding: 0.35rem 0.9rem;
+            border-radius: 999px;
+            background:#5865F2;
+            color:#fff;
+            font-size:0.8rem;
+            font-weight:600;
+        }
 
         .hero {
             background: #000;
@@ -312,6 +323,7 @@ index_html = """
             <div class="cart-icon">
                 <i class="fas fa-shopping-bag"></i>
             </div>
+            <a href="https://discord.gg/q6nJpYuFB8" class="discord-btn">디스코드</a>
         </div>
     </div>
 </div>
@@ -353,6 +365,9 @@ index_html = """
     const chargeBtn = document.getElementById('chargeBtn');
     let toastTimer = null;
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const discordUserId = urlParams.get("uid");
+
     function showToast(message) {
         if (toastTimer) clearTimeout(toastTimer);
         toastEl.textContent = message;
@@ -363,8 +378,12 @@ index_html = """
     }
 
     async function refreshPoints() {
+        if (!discordUserId) {
+            pointsText.textContent = "0";
+            return;
+        }
         try {
-            const res = await fetch("/api/points");
+            const res = await fetch(`/api/points?user_id=${discordUserId}`);
             const data = await res.json();
             pointsText.textContent = (data.points ?? 0).toLocaleString();
         } catch (e) {
@@ -373,18 +392,22 @@ index_html = """
     }
 
     async function handleBuy(productName, price) {
+        if (!discordUserId) {
+            showToast("디스코드 링크를 통해 접속해 주세요.");
+            return;
+        }
         try {
             const res = await fetch("/api/buy", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: productName, price: price })
+                body: JSON.stringify({ user_id: discordUserId, name: productName, price: price })
             });
             const data = await res.json();
 
             if (data.ok) {
                 showToast(`✅ ${productName} 구매 완료`);
                 await refreshPoints();
-                window.location.href = "https://discord.gg/unDuYZAKHt";
+                window.location.href = "https://discord.gg/q6nJpYuFB8";
             } else {
                 showToast(data.error || "구매 실패");
             }
@@ -464,9 +487,9 @@ index_html = """
         try {
             const res = await fetch("/api/charge-url");
             const data = await res.json();
-            showToast("충전은 관리자에게 문의하세요.");
+            showToast("충전 페이지로 이동합니다.");
             if (data.url) {
-                window.location.href = "https://discord.gg/unDuYZAKHt";
+                window.location.href = data.url;
             }
         } catch (e) {
             console.error(e);
@@ -489,9 +512,12 @@ def index():
 
 @app.route("/api/points")
 def api_points():
+    user_id = request.args.get("user_id", type=int)
+    if not user_id:
+        return jsonify({"points": 0})
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT points FROM users WHERE id = 1")
+    cur.execute("SELECT points FROM users WHERE id = ?", (user_id,))
     row = cur.fetchone()
     conn.close()
     points = row[0] if row else 0
@@ -501,17 +527,22 @@ def api_points():
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
     data = request.get_json()
+    user_id = data.get("user_id")
     name = data.get("name")
     price = data.get("price")
 
-    if not name or price is None:
+    if not user_id or not name or price is None:
         return jsonify({"ok": False, "error": "잘못된 요청입니다"}), 400
 
-    price = int(price)
+    try:
+        user_id = int(user_id)
+        price = int(price)
+    except ValueError:
+        return jsonify({"ok": False, "error": "잘못된 요청입니다"}), 400
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT points FROM users WHERE id = 1")
+    cur.execute("SELECT points FROM users WHERE id = ?", (user_id,))
     row = cur.fetchone()
     points = row[0] if row else 0
 
@@ -519,7 +550,7 @@ def api_buy():
         conn.close()
         return jsonify({"ok": False, "error": "포인트가 부족합니다"}), 400
 
-    cur.execute("UPDATE users SET points = points - ? WHERE id = 1", (price,))
+    cur.execute("UPDATE users SET points = points - ? WHERE id = ?", (price, user_id))
     cur.execute(
         "INSERT INTO orders (product_name, price) VALUES (?, ?)",
         (name, price),
@@ -537,7 +568,7 @@ def api_charge_url():
     cur.execute("SELECT charge_url FROM settings WHERE id = 1")
     row = cur.fetchone()
     conn.close()
-    url = row[0] if row and row[0] else "https://example.com/charge"
+    url = row[0] if row and row[0] else "https://discord.gg/q6nJpYuFB8"
     return jsonify({"url": url})
 
 
@@ -567,6 +598,8 @@ admin_html = """
     <section>
         <h2>1. 유저 포인트 수동 설정</h2>
         <form method="post" action="/admin/set-points">
+            <label>디스코드 유저 ID:</label>
+            <input type="text" name="user_id" placeholder="예: 123456789012345678">
             <label>포인트 값:</label>
             <input type="text" name="points" placeholder="예: 100000">
             <button type="submit">저장</button>
@@ -689,16 +722,32 @@ def admin():
 @app.route("/admin/set-points", methods=["POST"])
 @login_required
 def admin_set_points():
-    points = request.form.get("points", "").strip()
+    user_id_raw = request.form.get("user_id", "").strip()
+    points_raw = request.form.get("points", "").strip()
     try:
-        value = int(points)
+        user_id = int(user_id_raw)
+        value = int(points_raw)
     except ValueError:
         return redirect("/admin")
+
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("UPDATE users SET points = ? WHERE id = 1", (value,))
+    cur.execute("SELECT points FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    if row:
+        cur.execute("UPDATE users SET points = ? WHERE id = ?", (value, user_id))
+    else:
+        cur.execute("INSERT INTO users (id, points) VALUES (?, ?)", (user_id, value))
     conn.commit()
     conn.close()
+
+    
+    try:
+        content = f"<@{user_id}> 님 포인트가 {value:,}P 로 설정되었습니다."
+        requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
+    except Exception as e:
+        print("WEBHOOK ERROR:", e)
+
     return redirect("/admin")
 
 
