@@ -86,8 +86,8 @@ index_html = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>RED | 온라인 샵</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    //fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    //cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #fafaf8; color: #1c1c1c; line-height: 1.5; }
@@ -111,9 +111,14 @@ index_html = """
             flex-wrap: wrap;
         }
         .logo {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             font-weight: 700;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.3px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo-text {
             background: linear-gradient(135deg, #2b2d42, #4a4e69);
             -webkit-background-clip: text;
             background-clip: text;
@@ -125,13 +130,19 @@ index_html = """
         .cart-icon { position: relative; font-size: 1.4rem; }
 
         .hero {
-            background: linear-gradient(120deg, #f4f1e1 0%, #e9e6d7 100%);
-            padding: 4rem 2rem;
-            text-align: center;
+            background: #000;
+            padding: 0;
             border-bottom: 1px solid #ddd8c8;
         }
-        .hero h1 { font-size: 3rem; font-weight: 700; margin-bottom: 1rem; color: #1e2a2f; }
-        .hero p { font-size: 1.2rem; color: #3c4a4f; max-width: 600px; margin: 0 auto; }
+        .hero-inner {
+            max-width: 1280px;
+            margin: 0 auto;
+            height: 260px;
+            background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png?ex=69cbc344&is=69ca71c4&hm=e6fa4e68b74088782c150e3dd67245bbd7f7fdf179905bdfd26153e7ed94c346');
+            background-size: cover;
+            background-position: center;
+            border-radius: 0 0 24px 24px;
+        }
 
         .info-bar {
             max-width: 1280px;
@@ -162,7 +173,7 @@ index_html = """
             padding: 0 2rem;
         }
         .section-title {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             font-weight: 600;
             margin-bottom: 2rem;
             border-left: 5px solid #b5838d;
@@ -247,10 +258,10 @@ index_html = """
         }
 
         @media (max-width: 640px) {
-            .hero h1 { font-size: 2rem; }
             .nav-container { flex-direction: column; gap: 1rem; }
             .nav-links { gap: 1.2rem; }
             .info-bar { flex-direction: column; align-items: flex-start; }
+            .hero-inner { height: 200px; border-radius: 0; }
         }
     </style>
 </head>
@@ -262,9 +273,9 @@ index_html = """
             <img
                 src="https://cdn.discordapp.com/attachments/1084455385848627250/1488158725670961254/8f7d09ac9d5ba195.png?ex=69cbc350&is=69ca71d0&hm=951aa334d7e1c5e77b7a7970a48ec91752e8c82094ccf3c9e37b5c6ddb4250b3"
                 alt="RED+RLNL"
-                style="height: 28px; vertical-align: middle; margin-right: 8px; border-radius: 4px;"
+                style="height: 26px; border-radius: 4px;"
             >
-            RED+RLNL
+            <span class="logo-text">RED+RLNL</span>
         </div>
         <div class="nav-links">
             <a href="#">홈</a>
@@ -278,13 +289,8 @@ index_html = """
     </div>
 </div>
 
-<section class="hero" style="
-    background-image: url('https://cdn.discordapp.com/attachments/1084455385848627250/1488158674340937739/36a47df6e588163a.png?ex=69cbc344&is=69ca71c4&hm=e6fa4e68b74088782c150e3dd67245bbd7f7fdf179905bdfd26153e7ed94c346');
-    background-size: cover;
-    background-position: center;
-">
-    <h1>일상에 감각을 더하다</h1>
-    <p>최고의 아이템들. 지금 만나보세요.</p>
+<section class="hero">
+    <div class="hero-inner"></div>
 </section>
 
 <div class="info-bar">
@@ -297,7 +303,7 @@ index_html = """
 </div>
 
 <section class="products-section">
-    <div class="section-title">✨ 일상에 감각을 더하다</div>
+    <div class="section-title">✨ 오늘의 추천 상품</div>
     <div class="product-grid" id="productGrid"></div>
 </section>
 
@@ -307,11 +313,11 @@ index_html = """
 
 <div id="toastMsg" class="toast"></div>
 
-<script>
+<script> 
     const products = [
-        { id: 1, name: "🔴RED-trainer",    price: 13000, desc: "집중력과 몰입감을 높여주는 트레이닝 패키지", emoji: "🏋️" },
-        { id: 2, name: "🔴RED-wolf",       price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺" },
-        { id: 3, name: "🔴RED-kd-dropper", price: 7000,  desc: "KD를 확실히 떨어뜨리는 실험용 패키지",     emoji: "🎯" }
+        { id: 1, name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘",              price: 13000, desc: "라이트 버전으로 부담 없이 경험해보는 패키지", emoji: "🏋️" },
+        { id: 2, name: "🔴RED-𝗪𝗢𝗟𝗙",                 price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺" },
+        { id: 3, name: "🔴RED-kd-dropper",      price: 7000,  desc: "집중력과 몰입감을 높여주는 트레이닝 패키지", emoji: "🎯" }
     ];
 
     const productGrid = document.getElementById('productGrid');
@@ -370,10 +376,16 @@ index_html = """
             const imgDiv = document.createElement('div');
             imgDiv.className = 'product-img';
 
-            if (product.name === "🔴RED-wolf") {
+            if (product.name === "🔴RED-𝗪𝗢𝗟𝗙") {
                 imgDiv.innerHTML = `
                     <img src="https://cdn.discordapp.com/attachments/1083101135096795201/1488186254561378425/WOLF.webp?ex=69cbdcf4&is=69ca8b74&hm=7c6e58852c1c44851df7aa5706670c6d1ed777dce03f80bd413091fbd3267786"
                          alt="RED-wolf"
+                         style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
+                `;
+            } else if (product.name === "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘") {
+                imgDiv.innerHTML = `
+                    <img src="https://cdn.discordapp.com/attachments/1084455385848627250/1488164919663788065/WOLF_LITE.png?ex=69cbc915&is=69ca7795&hm=584c44535dd2b20996264d09dc9462c4cab828df89036640dc1fa1aaa0c0017a"
+                         alt="RED-WOLF-LITE"
                          style="width:100%; height:100%; object-fit:cover; border-radius:24px 24px 0 0;">
                 `;
             } else {
@@ -529,7 +541,7 @@ admin_html = """
     <section>
         <h2>1. 유저 포인트 수동 설정</h2>
         <form method="post" action="/admin/set-points">
-            <label>포인트 값:</label>
+            abel>포인트 값:</label>
             <input type="text" name="points" placeholder="예: 100000">
             <button type="submit">저장</button>
         </form>
@@ -538,7 +550,7 @@ admin_html = """
     <section>
         <h2>2. 충전하기 버튼 URL 설정</h2>
         <form method="post" action="/admin/set-charge-url">
-            <label>충전 페이지 URL:</label>
+            abel>충전 페이지 URL:</label>
             <input type="text" name="url" placeholder="https://...">
             <button type="submit">저장</button>
         </form>
@@ -594,9 +606,9 @@ login_html = """
     <div class="box">
         <h1>RED Admin</h1>
         <form method="post">
-            <label>아이디</label>
+            abel>아이디</label>
             <input type="text" name="username" autocomplete="off">
-            <label>비밀번호</label>
+            abel>비밀번호</label>
             <input type="password" name="password" autocomplete="off">
             <button type="submit">로그인</button>
             {% if error %}
