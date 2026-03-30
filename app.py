@@ -86,8 +86,8 @@ index_html = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>RED | 온라인 샵</title>
-    //fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
-    //cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #fafaf8; color: #1c1c1c; line-height: 1.5; }
@@ -156,16 +156,26 @@ index_html = """
         }
         .info-bar-left { font-size: 0.95rem; color: #555; }
         .info-bar-right button {
-            background: #b5838d;
+            background: #ff4b6e;
             color: white;
             border: none;
-            padding: 0.6rem 1rem;
+            padding: 0.7rem 1.3rem;
             border-radius: 999px;
-            font-size: 0.9rem;
-            font-weight: 600;
+            font-size: 0.95rem;
+            font-weight: 700;
             cursor: pointer;
+            box-shadow: 0 8px 18px rgba(255, 75, 110, 0.35);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
-        .info-bar-right button:hover { background:#8d5f6d; }
+        .info-bar-right button:hover {
+            background: #ff1f50;
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(255, 75, 110, 0.45);
+        }
+        .info-bar-right button:active {
+            transform: translateY(0);
+            box-shadow: 0 6px 14px rgba(255, 75, 110, 0.3);
+        }
 
         .products-section {
             max-width: 1280px;
@@ -176,9 +186,26 @@ index_html = """
             font-size: 1.6rem;
             font-weight: 600;
             margin-bottom: 2rem;
-            border-left: 5px solid #b5838d;
-            padding-left: 1rem;
+            position: relative;
+            display: inline-block;
+            padding-bottom: 4px;
         }
+        .section-title::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            height: 3px;
+            width: 0;
+            background: linear-gradient(90deg, #b5838d, #ff4b6e);
+            border-radius: 999px;
+            animation: section-underline 1s ease-out forwards;
+        }
+        @keyframes section-underline {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+
         .product-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -313,10 +340,10 @@ index_html = """
 
 <div id="toastMsg" class="toast"></div>
 
-<script> 
+<script>
     const products = [
-        { id: 1, name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘",              price: 13000, desc: "라이트 버전으로 부담 없이 경험해보는 패키지", emoji: "🏋️" },
-        { id: 2, name: "🔴RED-𝗪𝗢𝗟𝗙",                 price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺" },
+        { id: 1, name: "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", price: 13000, desc: "라이트 버전으로 부담 없이 경험해보는 패키지", emoji: "🏋️" },
+        { id: 2, name: "🔴RED-𝗪𝗢𝗟𝗙",         price: 13000, desc: "공격적인 운영을 위한 하이레벨 패키지",      emoji: "🐺" },
         { id: 3, name: "🔴RED-kd-dropper",      price: 7000,  desc: "집중력과 몰입감을 높여주는 트레이닝 패키지", emoji: "🎯" }
     ];
 
@@ -357,7 +384,7 @@ index_html = """
             if (data.ok) {
                 showToast(`✅ ${productName} 구매 완료`);
                 await refreshPoints();
-                window.location.href = "https://discord.gg/activationw5jzJCFMTR";
+                window.location.href = "https://discord.gg/unDuYZAKHt";
             } else {
                 showToast(data.error || "구매 실패");
             }
@@ -437,10 +464,9 @@ index_html = """
         try {
             const res = await fetch("/api/charge-url");
             const data = await res.json();
+            showToast("충전은 관리자에게 문의하세요.");
             if (data.url) {
-                window.location.href = data.url;
-            } else {
-                showToast("충전 URL이 설정되지 않았습니다");
+                window.location.href = "https://discord.gg/unDuYZAKHt";
             }
         } catch (e) {
             console.error(e);
@@ -541,7 +567,7 @@ admin_html = """
     <section>
         <h2>1. 유저 포인트 수동 설정</h2>
         <form method="post" action="/admin/set-points">
-            abel>포인트 값:</label>
+            <label>포인트 값:</label>
             <input type="text" name="points" placeholder="예: 100000">
             <button type="submit">저장</button>
         </form>
@@ -550,7 +576,7 @@ admin_html = """
     <section>
         <h2>2. 충전하기 버튼 URL 설정</h2>
         <form method="post" action="/admin/set-charge-url">
-            abel>충전 페이지 URL:</label>
+            <label>충전 페이지 URL:</label>
             <input type="text" name="url" placeholder="https://...">
             <button type="submit">저장</button>
         </form>
@@ -606,9 +632,9 @@ login_html = """
     <div class="box">
         <h1>RED Admin</h1>
         <form method="post">
-            abel>아이디</label>
+            <label>아이디</label>
             <input type="text" name="username" autocomplete="off">
-            abel>비밀번호</label>
+            <label>비밀번호</label>
             <input type="password" name="password" autocomplete="off">
             <button type="submit">로그인</button>
             {% if error %}
