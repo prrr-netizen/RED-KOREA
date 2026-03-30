@@ -83,8 +83,8 @@ index_html = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>RED | 온라인 샵</title>
-    //fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
-    //cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #fafaf8; color: #1c1c1c; line-height: 1.5; }
@@ -597,9 +597,9 @@ admin_html = """
     <section>
         <h2>1. 유저 포인트 수동 설정</h2>
         <form method="post" action="/admin/set-points">
-            abel>디스코드 유저 ID:</label>
+            <label>디스코드 유저 ID:</label>
             <input type="text" name="user_id" placeholder="예: 123456789012345678">
-            abel>포인트 값:</label>
+            <label>포인트 값:</label>
             <input type="text" name="points" placeholder="예: 100000">
             <button type="submit">저장</button>
         </form>
@@ -608,7 +608,7 @@ admin_html = """
     <section>
         <h2>2. 충전하기 버튼 URL 설정</h2>
         <form method="post" action="/admin/set-charge-url">
-            abel>충전 페이지 URL:</label>
+            <label>충전 페이지 URL:</label>
             <input type="text" name="url" placeholder="https://...">
             <button type="submit">저장</button>
         </form>
@@ -664,9 +664,9 @@ login_html = """
     <div class="box">
         <h1>RED Admin</h1>
         <form method="post">
-            abel>아이디</label>
+            <label>아이디</label>
             <input type="text" name="username" autocomplete="off">
-            abel>비밀번호</label>
+            <label>비밀번호</label>
             <input type="password" name="password" autocomplete="off">
             <button type="submit">로그인</button>
             {% if error %}
@@ -763,5 +763,5 @@ def admin_set_charge_url():
 
 
 if __name__ == "__main__":
-    # 로컬 개발용. 실제 배포(리전/플랫폼)에서는 WSGI 서버(gunicorn 등)에서 app만 import해서 사용.
+    # 로컬 개발용. 실제 배포에서는 WSGI 서버(gunicorn 등)에서 app만 import해서 사용.
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
