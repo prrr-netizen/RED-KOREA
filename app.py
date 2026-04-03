@@ -516,7 +516,7 @@ def run_bot():
         print(f"봇 실행 오류: {e}")
 
 # ==============================
-# Flask 웹 라우트 (타입 안전)
+# Flask 웹 라우트 (타입 안전 + 디버깅)
 # ==============================
 @app.before_request
 def normalize_session():
@@ -544,51 +544,82 @@ def api_points():
 
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
-    """안전한 구매 API - 타입 에러 처리 완료"""
+    """안전한 구매 API - 디버깅 로그 포함"""
+    
+    # ===== 디버깅 로그 시작 =====
+    print("\n" + "="*60)
+    print("[DEBUG] /api/buy 호출됨")
+    print(f"[DEBUG] 시간: {datetime.now()}")
+    print(f"[DEBUG] 세션 전체: {dict(session)}")
+    print(f"[DEBUG] 세션 user_id: {session.get('user_id')!r} (타입: {type(session.get('user_id'))})")
+    print(f"[DEBUG] 요청 메소드: {request.method}")
+    print(f"[DEBUG] 요청 헤더 Content-Type: {request.headers.get('Content-Type')}")
+    print(f"[DEBUG] 요청 raw 데이터: {request.get_data(as_text=True)}")
+    # ===== 디버깅 로그 끝 =====
+    
     user_id = ensure_user_id()
     if not user_id:
+        print("[DEBUG] ❌ user_id 없음 - 로그인 필요")
         return jsonify({"ok": False, "error": "로그인이 필요합니다. 다시 로그인해주세요."}), 401
+    
+    print(f"[DEBUG] ✅ 변환된 user_id: {user_id} (타입: {type(user_id)})")
     
     # 요청 데이터 파싱
     try:
         data = request.get_json()
+        print(f"[DEBUG] 파싱된 JSON 데이터: {data}")
         if not data:
+            print("[DEBUG] ❌ 데이터 없음")
             return jsonify({"ok": False, "error": "잘못된 요청 형식입니다."}), 400
     except Exception as e:
+        print(f"[DEBUG] ❌ JSON 파싱 오류: {e}")
         return jsonify({"ok": False, "error": f"JSON 파싱 오류: {str(e)}"}), 400
     
     product_id = data.get("product_id")
+    print(f"[DEBUG] product_id: {product_id}")
+    
     if not product_id:
+        print("[DEBUG] ❌ product_id 없음")
         return jsonify({"ok": False, "error": "상품 ID가 필요합니다."}), 400
     
     # 상품 찾기
     product = next((p for p in PRODUCTS if p["id"] == product_id), None)
     if not product:
+        print(f"[DEBUG] ❌ 존재하지 않는 상품: {product_id}")
         return jsonify({"ok": False, "error": f"존재하지 않는 상품입니다: {product_id}"}), 400
     
     price = product["price"]
     product_name = product["name"]
+    print(f"[DEBUG] 상품명: {product_name}, 가격: {price}")
     
     # 현재 포인트 확인
     current_points = get_points(user_id)
+    print(f"[DEBUG] 현재 포인트: {current_points}")
     
     # 포인트 차감
     new_balance = remove_points(user_id, price)
     if new_balance is None:
+        print(f"[DEBUG] ❌ 포인트 부족 (필요: {price}, 보유: {current_points})")
         return jsonify({
             "ok": False, 
             "error": f"포인트 부족 (필요: {price:,}P / 보유: {current_points:,}P)"
         }), 400
+    
+    print(f"[DEBUG] ✅ 포인트 차감됨, 새 잔액: {new_balance}")
     
     # 코드 발급
     code = get_unused_code(product_id)
     if code is None:
         # 롤백: 차감한 포인트 복구
         add_points(user_id, price)
+        print(f"[DEBUG] ❌ 재고 부족 - 롤백됨")
         return jsonify({"ok": False, "error": f"재고 부족 - {product_name}"}), 400
+    
+    print(f"[DEBUG] ✅ 코드 발급됨: {code}")
     
     # 주문 저장
     insert_order(user_id, product_name, price, code)
+    print(f"[DEBUG] ✅ 주문 저장됨")
     
     # 웹훅 알림 (비동기, 에러 무시)
     try:
@@ -602,8 +633,9 @@ def api_buy():
             color=0x2ecc71
         )
         requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
+        print("[DEBUG] ✅ 관리자 웹훅 전송됨")
     except Exception as e:
-        print(f"[WEBHOOK_ERROR] admin: {e}")
+        print(f"[DEBUG] ⚠️ 관리자 웹훅 오류: {e}")
     
     try:
         buy_embed = discord.Embed(
@@ -612,8 +644,12 @@ def api_buy():
             color=0x2ecc71
         )
         requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
+        print("[DEBUG] ✅ 구매로그 웹훅 전송됨")
     except Exception as e:
-        print(f"[WEBHOOK_ERROR] buy_log: {e}")
+        print(f"[DEBUG] ⚠️ 구매로그 웹훅 오류: {e}")
+    
+    print(f"[DEBUG] ✅ 구매 완료 응답 반환")
+    print("="*60 + "\n")
     
     return jsonify({
         "ok": True, 
@@ -659,7 +695,7 @@ def api_charge_request():
     return jsonify({"ok": True, "order_number": order_num})
 
 # ==============================
-# HTML 템플릿 (전체)
+# HTML 템플릿
 # ==============================
 index_html = """
 <!DOCTYPE html>
@@ -842,6 +878,7 @@ index_html = """
     }
 
     async function buyProduct(productId, productName, price) {
+        console.log('[DEBUG] 구매 요청:', productId, productName, price);
         try {
             const res = await fetch('/api/buy', {
                 method: 'POST',
@@ -849,6 +886,7 @@ index_html = """
                 body: JSON.stringify({ product_id: productId })
             });
             const data = await res.json();
+            console.log('[DEBUG] 응답:', data);
             if (data.ok) {
                 showToast(`✅ 구매 완료! 코드: ${data.code}`);
                 refreshPoints();
@@ -858,6 +896,7 @@ index_html = """
                 showToast(data.error || "구매 실패", true);
             }
         } catch(e) {
+            console.error('[DEBUG] 네트워크 오류:', e);
             showToast("네트워크 오류: " + e.message, true);
         }
     }
