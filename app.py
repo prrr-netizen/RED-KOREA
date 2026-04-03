@@ -42,16 +42,16 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "dev-pass-change")
 
 # 디스코드 OAuth2
-DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "1478639969009406004")
-DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "여기에_시크릿키")
+DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "1488342279029784768")
+DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "S8wERVotwZOSpz2A_75KCIWeYbxMf9GP")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "https://api.redkorea.store/auth/callback")
 
 # 웹훅
 ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1489485738168025279/nwe2k1dQl7f6lPpS9jCJJpHUXFD3d-dtcMCvS_NiDPXPsDtPW1hljJ1xFOdxPzf3QCxz"
 BUY_LOG_WEBHOOK_URL = "https://discord.com/api/webhooks/1488231305396224041/Fa_z7Wihwf9-k79aGNcvaLNj3emxWYxlFoD6xVGkgLxzZKig3Uc7MQpL8Nk93d4Pyfat"
 
-# PostgreSQL (비밀번호 포함)
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:5P5iPdjnEMP7ZKDQ@db.cczcenhgureeamwjtkug.supabase.co:5432/postgres")
+# PostgreSQL (Supabase Session Pooler – IPv4)
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres.cczcenhgureeamwjtkug:5P5iPdjnEMP7ZKDQ@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require")
 
 # 데이터베이스 연결 테스트
 try:
@@ -115,7 +115,7 @@ def init_db():
 init_db()
 
 # ==============================
-# DB 함수 (포인트, 주문, 코드, 충전요청)
+# DB 함수
 # ==============================
 def get_points(user_id: int) -> int:
     conn = get_db_connection()
@@ -582,7 +582,7 @@ def api_charge_request():
     except: pass
     return jsonify({"ok": True, "order_number": order_num})
 
-# ========== HTML 템플릿 (완전한 코드) ==========
+# ========== HTML 템플릿 ==========
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
