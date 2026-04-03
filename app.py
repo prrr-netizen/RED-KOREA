@@ -54,10 +54,18 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY, points INTEGER DEFAULT 0, has_purchased INTEGER DEFAULT 0)")
+    # users 테이블에 has_purchased 컬럼이 없으면 추가
+    cur.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY, points INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, user_id BIGINT, product_name TEXT, price INTEGER, code TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     cur.execute("CREATE TABLE IF NOT EXISTS product_codes (id SERIAL PRIMARY KEY, product_id TEXT NOT NULL, code TEXT NOT NULL UNIQUE, used INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS charge_requests (id SERIAL PRIMARY KEY, order_number TEXT UNIQUE NOT NULL, user_id BIGINT NOT NULL, amount INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, processed INTEGER DEFAULT 0)")
+    
+    # has_purchased 컬럼 추가 (없으면)
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN has_purchased INTEGER DEFAULT 0")
+    except:
+        pass
+    
     conn.commit()
     conn.close()
     print("✅ DB 초기화 완료")
@@ -92,10 +100,14 @@ def has_purchased(user_id):
         return False
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT has_purchased FROM users WHERE id = %s", (uid,))
-    row = cur.fetchone()
-    conn.close()
-    return row["has_purchased"] == 1 if row else False
+    try:
+        cur.execute("SELECT has_purchased FROM users WHERE id = %s", (uid,))
+        row = cur.fetchone()
+        conn.close()
+        return row["has_purchased"] == 1 if row else False
+    except:
+        conn.close()
+        return False
 
 def add_points(user_id, amount):
     uid = to_int(user_id)
@@ -138,8 +150,11 @@ def mark_as_purchased(user_id):
         return
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE users SET has_purchased = 1 WHERE id = %s AND has_purchased = 0", (uid,))
-    conn.commit()
+    try:
+        cur.execute("UPDATE users SET has_purchased = 1 WHERE id = %s AND (has_purchased IS NULL OR has_purchased = 0)", (uid,))
+        conn.commit()
+    except:
+        pass
     conn.close()
 
 def insert_order(user_id, product_name, price, code):
@@ -302,14 +317,10 @@ async def on_ready():
     print(f"✅ 디스코드 봇 로그인: {bot.user}")
     print(f"📋 등록된 명령어: {[cmd.name for cmd in bot.commands]}")
     
-    # 명령어 동기화 확인
     guild = bot.get_guild(GUILD_ID)
     if guild:
         print(f"📌 서버: {guild.name}")
-        print(f"📌 비구매자 역할 ID: {NON_BUYER_ROLE_ID}")
-        print(f"📌 구매자 역할 ID: {BUYER_ROLE_ID}")
     
-    # 상태 설정
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=".도움말"))
 
 @bot.event
@@ -905,7 +916,7 @@ ORDERS_TEMPLATE = """
             container.innerHTML = '<p style="text-align:center;padding:2rem;">아직 구매 내역이 없습니다.</p>';
             return;
         }
-        let html = '<tr><thead><tr><th>상품명</th><th>금액</th><th>코드</th><th>구매일시</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>상품명</th><th>금액</th><th>코드</th><th>구매일시</th></tr></thead><tbody>';
         for (let o of data.orders) {
             html += `<tr>
                 <td>${o.product_name}</td>
