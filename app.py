@@ -763,8 +763,8 @@ def api_charge_request():
         return jsonify({"ok": False, "error": "로그인이 필요합니다."}), 401
     data = request.get_json()
     amount = data.get("amount")
-    if not amount or amount < 1000:
-        return jsonify({"ok": False, "error": "최소 충전 금액은 1,000원입니다."}), 400
+    if not amount or amount < 1:
+        return jsonify({"ok": False, "error": "충전 금액을 입력해주세요"}), 400
     order_num = create_charge_request(user_id, amount)
     content = (
         f"💳 **충전 요청 접수**\n"
