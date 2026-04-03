@@ -95,7 +95,7 @@ def init_db():
 init_db()
 
 # ==============================
-# DB 함수
+# DB 함수 (간략히 - 기존과 동일)
 # ==============================
 def get_points(user_id: int) -> int:
     conn = sqlite3.connect(DB_PATH)
@@ -228,7 +228,7 @@ def create_charge_request(user_id: int, amount: int) -> str:
     return order_num
 
 # ==============================
-# 상품 데이터 (홈쇼핑 카드용)
+# 상품 데이터
 # ==============================
 PRODUCTS = [
     {"id": "wolf_lite", "name": "🔴 RED-WOLF-LITE", "desc": "라이트 버전으로 부담 없이 경험해보는 패키지", "price": 7000, "img": "https://i.imgur.com/Z3BhZ18.jpeg"},
@@ -238,7 +238,7 @@ PRODUCTS = [
 ]
 
 # ==============================
-# 디스코드 봇
+# 디스코드 봇 (기존과 동일 - 생략)
 # ==============================
 intents = discord.Intents.default()
 intents.message_content = True
@@ -258,7 +258,6 @@ async def safe_dm_embed(user: discord.abc.User, embed: discord.Embed) -> None:
     except Exception as e:
         print(f"[DM_EMBED_ERROR] user={user.id} | {e}")
 
-# 디스코드 구매 뷰
 class ProductSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
@@ -294,17 +293,14 @@ class ProductSelect(discord.ui.Select):
             await interaction.response.send_message(f"❌ 재고 부족 - {product_name}", ephemeral=True)
             return
         insert_order(user.id, product_name, price, code)
-        # 관리자 웹훅 (상세)
         admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** {user.mention} (`{user.id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
         try:
             requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
         except: pass
-        # 구매 로그 웹훅 (익명)
         buy_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
         try:
             requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
         except: pass
-        # DM 발송
         dm_embed = discord.Embed(title="✅ 구매 완료", description=f"**상품명:** {product_name}\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
         await safe_dm_embed(user, dm_embed)
         await interaction.response.send_message(f"✅ 구매 완료! 코드: `{code}` (DM으로도 전송)", ephemeral=True)
@@ -560,7 +556,6 @@ def api_buy():
         add_points(user_id, price)
         return jsonify({"ok": False, "error": "재고 부족"}), 400
     insert_order(user_id, product_name, price, code)
-    # 웹훅 전송 (디스코드 구매와 동일)
     admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** <@{user_id}> (`{user_id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
     try:
         requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
@@ -587,7 +582,9 @@ def api_charge_request():
     except: pass
     return jsonify({"ok": True, "order_number": order_num})
 
-# HTML 템플릿 (홈쇼핑 스타일 + 구매내역)
+# ==============================
+# HTML 템플릿 (공지 마퀴 + 보안 스크립트 포함)
+# ==============================
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -607,6 +604,33 @@ index_html = """
             padding: 2rem 1.5rem;
         }
         .container { max-width: 1280px; margin: 0 auto; }
+        /* 공지 마퀴 */
+        .notice-bar {
+            background: linear-gradient(90deg, #1e1a2f, #2a1e2c, #1e1a2f);
+            border-bottom: 1px solid rgba(255,75,110,0.3);
+            border-top: 1px solid rgba(255,75,110,0.2);
+            padding: 0.7rem 0;
+            overflow: hidden;
+            white-space: nowrap;
+            margin-bottom: 1.5rem;
+            border-radius: 60px;
+        }
+        .notice-track {
+            display: inline-block;
+            animation: scrollNotice 25s linear infinite;
+        }
+        .notice-item {
+            display: inline-block;
+            padding: 0 2rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .notice-item i { color: #ff4b6e; margin-right: 0.5rem; }
+        .notice-item strong { color: #ffb347; }
+        @keyframes scrollNotice {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
         .glass-card {
             background: rgba(15,23,42,0.65);
             backdrop-filter: blur(16px);
@@ -650,20 +674,38 @@ index_html = """
         .product-price { font-size: 1.4rem; font-weight: 800; color: #ffb347; margin-bottom: 1rem; }
         .buy-btn { background: linear-gradient(135deg,#ff4b6e,#ff6b4a); border: none; width: 100%; padding: 0.7rem; border-radius: 40px; font-weight: 700; color: white; cursor: pointer; transition: 0.2s; }
         .buy-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(255,75,110,0.4); }
-        .orders-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-        .orders-table th, .orders-table td { padding: 0.8rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .orders-table th { color: #9ca3af; font-weight: 500; }
-        .code-cell { font-family: monospace; background: #0f172a; padding: 0.2rem 0.5rem; border-radius: 8px; }
+        .login-message {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(0,0,0,0.3);
+            border-radius: 1.5rem;
+            margin: 2rem 0;
+        }
+        .footer { text-align: center; color: #6c6c7a; font-size: 0.7rem; margin-top: 2rem; }
         .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #1e1a2f; backdrop-filter: blur(20px); padding: 1.8rem; border-radius: 1.5rem; z-index: 1000; width: 300px; text-align: center; border: 1px solid #ff4b6e; }
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; }
         input { width: 100%; padding: 0.6rem; margin: 1rem 0; border-radius: 12px; border: 1px solid #4b5563; background: #0f172a; color: white; text-align: center; }
         .modal button { background: #ff4b6e; border: none; padding: 0.5rem 1rem; border-radius: 30px; color: white; cursor: pointer; margin: 0 0.5rem; }
-        .footer { text-align: center; color: #6c6c7a; font-size: 0.7rem; margin-top: 2rem; }
         @media (max-width: 640px) { .product-grid { grid-template-columns: 1fr; } .header { flex-direction: column; } }
     </style>
 </head>
 <body>
 <div class="container">
+    <!-- 공지 마퀴 -->
+    <div class="notice-bar">
+        <div class="notice-track">
+            <span class="notice-item"><i class="fas fa-gift"></i> 첫 구매 15% 할인! <strong>코드: WELCOME15</strong></span>
+            <span class="notice-item"><i class="fas fa-fire"></i> 🔥 3월 한정 특가! 전 상품 10% 추가 할인</span>
+            <span class="notice-item"><i class="fas fa-headset"></i> 문의는 디스코드 채널에서 24시간 응대</span>
+            <span class="notice-item"><i class="fas fa-charging-station"></i> 충전 5만원 이상 시 <strong>보너스 20%</strong> 적립</span>
+            <!-- 복제본 -->
+            <span class="notice-item"><i class="fas fa-gift"></i> 첫 구매 15% 할인! <strong>코드: WELCOME15</strong></span>
+            <span class="notice-item"><i class="fas fa-fire"></i> 🔥 3월 한정 특가! 전 상품 10% 추가 할인</span>
+            <span class="notice-item"><i class="fas fa-headset"></i> 문의는 디스코드 채널에서 24시간 응대</span>
+            <span class="notice-item"><i class="fas fa-charging-station"></i> 충전 5만원 이상 시 <strong>보너스 20%</strong> 적립</span>
+        </div>
+    </div>
+
     <div class="glass-card">
         <div class="header">
             <div class="logo">RED+RLNL</div>
@@ -686,6 +728,9 @@ index_html = """
 
     <div class="glass-card">
         <div class="product-grid" id="productGrid"></div>
+        {% if not user_id %}
+        <div class="login-message">🔒 로그인 후 상품을 볼 수 있습니다.</div>
+        {% endif %}
     </div>
 
     <div class="footer">© 2026 RED | 프리미엄 서비스</div>
@@ -755,6 +800,7 @@ index_html = """
     }
 
     function renderProducts() {
+        if (!userLoggedIn) return;
         const grid = document.getElementById('productGrid');
         grid.innerHTML = '';
         products.forEach(p => {
@@ -803,9 +849,65 @@ index_html = """
                 overlay.style.display = 'none';
             } else { showToast(data.error); }
         };
-    } else {
-        document.getElementById('productGrid').innerHTML = '<div style="text-align:center; padding:2rem;">🔒 로그인 후 상품을 볼 수 있습니다.</div>';
     }
+
+    // ========== 보안 스크립트 (개발자 도구 차단) ==========
+    let blocked = false;
+    function killPage() {
+        if (blocked) return;
+        blocked = true;
+        document.documentElement.innerHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Access Denied</title><style>
+                body { margin:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; font-family:system-ui; }
+                .block { text-align:center; color:#ff3333; border:2px solid #ff3333; padding:2rem; border-radius:24px; background:#1a0000; box-shadow:0 0 50px rgba(255,0,0,0.5); }
+                h1 { font-size:2rem; margin-bottom:1rem; }
+                p { color:#ff9999; }
+            </style></head>
+            <body>
+                <div class="block">
+                    <h1>⚠️ 접근 차단 ⚠️</h1>
+                    <p>개발자 도구 / 소스 보기 등은 허용되지 않습니다.</p>
+                    <p>이 페이지는 보호되고 있습니다.</p>
+                </div>
+            </body>
+            </html>
+        `;
+        window.location.replace('about:blank');
+    }
+    document.addEventListener('contextmenu', (e) => { e.preventDefault(); killPage(); });
+    document.addEventListener('keydown', (e) => {
+        const k = e.keyCode;
+        if (k === 123) { e.preventDefault(); killPage(); }
+        if (e.ctrlKey && e.shiftKey && [73, 74, 67].includes(k)) { e.preventDefault(); killPage(); }
+        if (e.ctrlKey && k === 85) { e.preventDefault(); killPage(); }
+        if (e.ctrlKey && (k === 78 || k === 84)) { e.preventDefault(); killPage(); }
+    });
+    const THRESHOLD = 200;
+    let devOpen = false;
+    function detectDevTools() {
+        const wDiff = window.outerWidth - window.innerWidth;
+        const hDiff = window.outerHeight - window.innerHeight;
+        if ((wDiff > THRESHOLD || hDiff > THRESHOLD) && !devOpen) {
+            devOpen = true;
+            killPage();
+        }
+    }
+    window.addEventListener('resize', detectDevTools);
+    window.addEventListener('load', detectDevTools);
+    window.addEventListener('focus', detectDevTools);
+    setInterval(detectDevTools, 500);
+    function detectDebugger() {
+        const start = Date.now();
+        debugger;
+        const end = Date.now();
+        if (end - start > 100) killPage();
+    }
+    setInterval(detectDebugger, 1000);
+    const noop = function(){};
+    const consoleMethods = ['log','warn','info','error','table','trace','debug','dir','dirxml','group','groupCollapsed','groupEnd','time','timeEnd','profile','profileEnd','count','clear'];
+    for (let m of consoleMethods) if (console[m]) console[m] = noop;
 </script>
 </body>
 </html>
@@ -924,6 +1026,64 @@ orders_html = """
     loadOrders();
     refreshPoints();
     setInterval(refreshPoints, 30000);
+
+    // 보안 스크립트
+    let blocked = false;
+    function killPage() {
+        if (blocked) return;
+        blocked = true;
+        document.documentElement.innerHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"><title>Access Denied</title><style>
+                body { margin:0; background:#000; display:flex; align-items:center; justify-content:center; height:100vh; font-family:system-ui; }
+                .block { text-align:center; color:#ff3333; border:2px solid #ff3333; padding:2rem; border-radius:24px; background:#1a0000; box-shadow:0 0 50px rgba(255,0,0,0.5); }
+                h1 { font-size:2rem; margin-bottom:1rem; }
+                p { color:#ff9999; }
+            </style></head>
+            <body>
+                <div class="block">
+                    <h1>⚠️ 접근 차단 ⚠️</h1>
+                    <p>개발자 도구 / 소스 보기 등은 허용되지 않습니다.</p>
+                    <p>이 페이지는 보호되고 있습니다.</p>
+                </div>
+            </body>
+            </html>
+        `;
+        window.location.replace('about:blank');
+    }
+    document.addEventListener('contextmenu', (e) => { e.preventDefault(); killPage(); });
+    document.addEventListener('keydown', (e) => {
+        const k = e.keyCode;
+        if (k === 123) { e.preventDefault(); killPage(); }
+        if (e.ctrlKey && e.shiftKey && [73, 74, 67].includes(k)) { e.preventDefault(); killPage(); }
+        if (e.ctrlKey && k === 85) { e.preventDefault(); killPage(); }
+        if (e.ctrlKey && (k === 78 || k === 84)) { e.preventDefault(); killPage(); }
+    });
+    const THRESHOLD = 200;
+    let devOpen = false;
+    function detectDevTools() {
+        const wDiff = window.outerWidth - window.innerWidth;
+        const hDiff = window.outerHeight - window.innerHeight;
+        if ((wDiff > THRESHOLD || hDiff > THRESHOLD) && !devOpen) {
+            devOpen = true;
+            killPage();
+        }
+    }
+    window.addEventListener('resize', detectDevTools);
+    window.addEventListener('load', detectDevTools);
+    window.addEventListener('focus', detectDevTools);
+    setInterval(detectDevTools, 500);
+    function detectDebugger() {
+        const start = Date.now();
+        debugger;
+        const end = Date.now();
+        if (end - start > 100) killPage();
+    }
+    setInterval(detectDebugger, 1000);
+    const noop = function(){};
+    const consoleMethods = ['log','warn','info','error','table','trace','debug','dir','dirxml','group','groupCollapsed','groupEnd','time','timeEnd','profile','profileEnd','count','clear'];
+    for (let m of consoleMethods) if (console[m]) console[m] = noop;
 </script>
 </body>
 </html>
