@@ -408,25 +408,26 @@ class RedVendingView(discord.ui.View):
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-
 class BuyerRedVendingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="💰 충전", style=discord.ButtonStyle.success, custom_id="buyer_red_charge")
     async def charge_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+
         user = interaction.user
         points = get_points(user.id)
         embed = discord.Embed(
             title="💳 충전 안내",
             description=(
-                f"**아래 계좌로 입금 후, 관리자에게 알려주세요.**\n\n"
-                f"🏦 농협은행\n💳 `3521617659683`\n👤 김대훈\n\n"
+                f"**아래 계좌로 입금 후, 관리자에게 알려주세요.**\\\\n\\\\n"
+                f"🏦 농협은행\\\\n💳 `3521617659683`\\\\n👤 김대훈\\\\n\\\\n"
                 f"📊 현재 포인트: **{points:,}P**"
             ),
             color=0x27ae60,
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="📊 정보", style=discord.ButtonStyle.secondary, custom_id="buyer_red_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -443,24 +444,12 @@ class BuyerRedVendingView(discord.ui.View):
         embed.add_field(name="💰 현재 포인트", value=f"{points:,}P", inline=False)
         embed.add_field(name="💸 누적 사용 포인트", value=f"{total_spent:,}P", inline=False)
         if orders:
-            order_list = "\n".join(
+            order_list = "\\\\n".join(
                 [f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders]
             )
             embed.add_field(name="📦 구매 내역", value=order_list, inline=False)
         else:
             embed.add_field(name="📦 구매 내역", value="아직 구매 내역이 없습니다.", inline=False)
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="buyer_red_buy")
-    async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ProductSelectView()
-        embed = discord.Embed(
-            title="📦 상품 선택",
-            description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.",
-            color=0x3498db,
-        )
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # ========== 디스코드 명령어 ==========
 @bot.command(name="충전")
