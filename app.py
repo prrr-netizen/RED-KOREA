@@ -39,9 +39,9 @@ DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "1478639969009406004")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "여기에_시크릿키")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "https://api.redkorea.store/auth/callback")
 
-# 🔥 웹훅 URL (사용자님 제공 기준으로 수정)
-ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1489485738168025279/nwe2k1dQl7f6lPpS9jCJJpHUXFD3d-dtcMCvS_NiDPXPsDtPW1hljJ1xFOdxPzf3QCxz"  # 관리자 채널
-BUY_LOG_WEBHOOK_URL = "https://discord.com/api/webhooks/1488231305396224041/Fa_z7Wihwf9-k79aGNcvaLNj3emxWYxlFoD6xVGkgLxzZKig3Uc7MQpL8Nk93d4Pyfat"   # 구매 로그 채널
+# 웹훅 분리
+ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1489485738168025279/nwe2k1dQl7f6lPpS9jCJJpHUXFD3d-dtcMCvS_NiDPXPsDtPW1hljJ1xFOdxPzf3QCxz"
+BUY_LOG_WEBHOOK_URL = "https://discord.com/api/webhooks/1488231305396224041/Fa_z7Wihwf9-k79aGNcvaLNj3emxWYxlFoD6xVGkgLxzZKig3Uc7MQpL8Nk93d4Pyfat"
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "shop.db")
 
@@ -58,6 +58,7 @@ def init_db():
             user_id INTEGER,
             product_name TEXT,
             price INTEGER,
+            code TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -82,6 +83,8 @@ def init_db():
     """)
     cur.execute("PRAGMA table_info(orders)")
     columns = [col[1] for col in cur.fetchall()]
+    if "code" not in columns:
+        cur.execute("ALTER TABLE orders ADD COLUMN code TEXT")
     if "user_id" not in columns:
         cur.execute("ALTER TABLE orders ADD COLUMN user_id INTEGER DEFAULT 0")
     cur.execute("INSERT OR IGNORE INTO users (id, points) VALUES (1, 0)")
@@ -92,7 +95,7 @@ def init_db():
 init_db()
 
 # ==============================
-# DB 함수 (포인트, 주문, 코드)
+# DB 함수
 # ==============================
 def get_points(user_id: int) -> int:
     conn = sqlite3.connect(DB_PATH)
@@ -131,20 +134,21 @@ def remove_points(user_id: int, amount: int) -> Optional[int]:
     conn.close()
     return new_balance
 
-def insert_order(user_id: int, product_name: str, price: int) -> None:
+def insert_order(user_id: int, product_name: str, price: int, code: str) -> None:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT INTO orders (user_id, product_name, price) VALUES (?, ?, ?)", (user_id, product_name, price))
+    cur.execute("INSERT INTO orders (user_id, product_name, price, code) VALUES (?, ?, ?, ?)",
+                (user_id, product_name, price, code))
     conn.commit()
     conn.close()
 
-def get_user_orders(user_id: int, limit: int = 5) -> List[dict]:
+def get_user_orders(user_id: int, limit: int = 10) -> List[dict]:
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("SELECT product_name, price, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
+    cur.execute("SELECT product_name, price, code, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", (user_id, limit))
     rows = cur.fetchall()
     conn.close()
-    return [{"product_name": r[0], "price": r[1], "created_at": r[2]} for r in rows]
+    return [{"product_name": r[0], "price": r[1], "code": r[2], "created_at": r[3]} for r in rows]
 
 def get_user_total_spent(user_id: int) -> int:
     conn = sqlite3.connect(DB_PATH)
@@ -205,9 +209,6 @@ def delete_code(code: str) -> bool:
     conn.close()
     return deleted
 
-# ==============================
-# 충전 요청 (주문번호 발급)
-# ==============================
 def create_charge_request(user_id: int, amount: int) -> str:
     while True:
         order_num = ''.join(random.choices(string.digits, k=6))
@@ -227,32 +228,28 @@ def create_charge_request(user_id: int, amount: int) -> str:
     return order_num
 
 # ==============================
+# 상품 데이터 (홈쇼핑 카드용)
+# ==============================
+PRODUCTS = [
+    {"id": "wolf_lite", "name": "🔴 RED-WOLF-LITE", "desc": "라이트 버전으로 부담 없이 경험해보는 패키지", "price": 7000, "img": "https://i.imgur.com/Z3BhZ18.jpeg"},
+    {"id": "wolf", "name": "🔴 RED-WOLF", "desc": "공격적인 운영을 위한 하이레벨 패키지", "price": 13000, "img": "https://i.imgur.com/0UBCMGR.jpeg"},
+    {"id": "kd_dropper", "name": "🔴 RED-kd-dropper", "desc": "집중력과 몰입감을 높여주는 트레이닝 패키지", "price": 7000, "img": "https://i.imgur.com/ApGpo16.jpeg"},
+    {"id": "owo", "name": "🔴 RED-OWO", "desc": "AIMBOT 가까운 뼈 혹은 타겟 지정! 가성비 !!", "price": 7000, "img": "https://i.imgur.com/7W1eg5S.png"},
+]
+
+# ==============================
 # 디스코드 봇
 # ==============================
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
 
-ADMIN_CHANNEL_ID = 1488221287531679915   # 실제 채널 ID (웹훅과 별개)
+ADMIN_CHANNEL_ID = 1488221287531679915
 BUY_LOG_CHANNEL_ID = 1488221128286802143
 REVIEW_CHANNEL_ID = 1487603259773419641
 STATUS_MESSAGES = ["상담 환영", "문의는 티켓"]
 status_cycle = cycle(STATUS_MESSAGES)
 BUYER_ROLE_NAME = "구매자"
-
-RED_PRODUCTS = [
-    {"id": "wolf_lite", "name": "🔴𝙍𝙀𝘿-𝗪𝗢𝗟𝗙-𝗟𝗜𝗧𝗘", "desc": "라이트 버전으로 부담 없이 경험 해보는 패키지", "price": 7000},
-    {"id": "wolf", "name": "🔴RED-𝗪𝗢𝗟𝗙", "desc": "공격적인 운영을 위한 하이레벨 패키지", "price": 13000},
-    {"id": "kd_dropper", "name": "🔴RED-kd-dropper", "desc": "집중력과 몰입감을 높여주는 트레이닝 패키지", "price": 7000},
-    {"id": "owo", "name": "🔴𝙍𝙀𝘿-𝐎𝐖𝐎", "desc": "AIMBOT 가까운 뼈 혹은 타겟 지정! 가성비 !!", "price": 7000},
-]
-
-async def is_buyer(member: discord.Member) -> bool:
-    guild = member.guild
-    if guild is None:
-        return False
-    role = discord.utils.get(guild.roles, name=BUYER_ROLE_NAME)
-    return role is not None and role in member.roles
 
 async def safe_dm_embed(user: discord.abc.User, embed: discord.Embed) -> None:
     try:
@@ -260,6 +257,57 @@ async def safe_dm_embed(user: discord.abc.User, embed: discord.Embed) -> None:
         await dm.send(embed=embed)
     except Exception as e:
         print(f"[DM_EMBED_ERROR] user={user.id} | {e}")
+
+# 디스코드 구매 뷰
+class ProductSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+        self.add_item(ProductSelect())
+
+class ProductSelect(discord.ui.Select):
+    def __init__(self):
+        options = []
+        for p in PRODUCTS:
+            stock = get_code_stock(p["id"])
+            label = f"{p['name']} - {p['price']:,}P"
+            description = f"{p['desc']} | 재고: {stock}개" if stock else f"{p['desc']} | 재고: 품절"
+            options.append(discord.SelectOption(label=label, value=p["id"], description=description))
+        super().__init__(placeholder="구매할 상품을 선택하세요", options=options, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        product_id = self.values[0]
+        product = next((p for p in PRODUCTS if p["id"] == product_id), None)
+        if not product:
+            await interaction.response.send_message("❌ 오류", ephemeral=True)
+            return
+        user = interaction.user
+        price = product["price"]
+        product_name = product["name"]
+        new_balance = remove_points(user.id, price)
+        if new_balance is None:
+            current = get_points(user.id)
+            await interaction.response.send_message(f"❌ 포인트 부족 (필요: {price:,}P / 보유: {current:,}P)", ephemeral=True)
+            return
+        code = get_unused_code(product_id)
+        if code is None:
+            add_points(user.id, price)
+            await interaction.response.send_message(f"❌ 재고 부족 - {product_name}", ephemeral=True)
+            return
+        insert_order(user.id, product_name, price, code)
+        # 관리자 웹훅 (상세)
+        admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** {user.mention} (`{user.id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
+        try:
+            requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
+        except: pass
+        # 구매 로그 웹훅 (익명)
+        buy_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
+        try:
+            requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
+        except: pass
+        # DM 발송
+        dm_embed = discord.Embed(title="✅ 구매 완료", description=f"**상품명:** {product_name}\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
+        await safe_dm_embed(user, dm_embed)
+        await interaction.response.send_message(f"✅ 구매 완료! 코드: `{code}` (DM으로도 전송)", ephemeral=True)
 
 class AfterPurchaseView(discord.ui.View):
     def __init__(self, product_name: str):
@@ -280,72 +328,6 @@ class AfterPurchaseView(discord.ui.View):
             await interaction.response.send_message("✅ 후기가 등록되었습니다.", ephemeral=True)
         modal.on_submit = on_submit
         await interaction.response.send_modal(modal)
-
-class ProductSelectView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=120)
-        self.add_item(ProductSelect())
-
-class ProductSelect(discord.ui.Select):
-    def __init__(self):
-        options = []
-        for p in RED_PRODUCTS:
-            stock = get_code_stock(p["id"])
-            label = f"{p['name']} - {p['price']:,}P"
-            description = f"{p['desc']} | 재고: {stock}개" if stock else f"{p['desc']} | 재고: 품절"
-            options.append(discord.SelectOption(label=label, value=p["id"], description=description))
-        super().__init__(placeholder="구매할 상품을 선택하세요", options=options, min_values=1, max_values=1)
-
-    async def callback(self, interaction: discord.Interaction):
-        product_id = self.values[0]
-        product = next((p for p in RED_PRODUCTS if p["id"] == product_id), None)
-        if not product:
-            embed = discord.Embed(title="❌ 오류", description="상품 정보를 찾을 수 없습니다.", color=0xff4444)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        user = interaction.user
-        price = product["price"]
-        product_name = product["name"]
-        new_balance = remove_points(user.id, price)
-        if new_balance is None:
-            current = get_points(user.id)
-            embed = discord.Embed(title="❌ 포인트 부족", description=f"필요 포인트: {price:,}P\n현재 포인트: {current:,}P", color=0xff4444)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        code = get_unused_code(product_id)
-        if code is None:
-            add_points(user.id, price)
-            embed = discord.Embed(title="❌ 재고 부족", description=f"`{product_name}`의 재고가 소진되었습니다.\n관리자에게 문의해 주세요.", color=0xff4444)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-        insert_order(user.id, product_name, price)
-        # 관리자 채널 웹훅 (상세 로그)
-        admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** {user.mention} (`{user.id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
-        try:
-            requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
-        except:
-            pass
-        # 구매 로그 채널 웹훅 (익명)
-        buy_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
-        try:
-            requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
-        except:
-            pass
-        # DM 발송
-        dm_embed = discord.Embed(title="✅ 구매 완료", description=f"**상품명:** {product_name}\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
-        dm_embed.set_footer(text="코드는 외부에 유출되지 않도록 주의해 주세요.")
-        await safe_dm_embed(user, dm_embed)
-        success_embed = discord.Embed(title="✅ 구매 완료", description=f"**{product_name}**\n차감 포인트: {price:,}P\n남은 포인트: {new_balance:,}P", color=0x2ecc71)
-        view = AfterPurchaseView(product_name)
-        await interaction.response.send_message(embed=success_embed, view=view, ephemeral=True)
-        guild = interaction.guild
-        if guild:
-            role = discord.utils.get(guild.roles, name=BUYER_ROLE_NAME)
-            if role and role not in user.roles:
-                try:
-                    await user.add_roles(role, reason="첫 구매로 인한 구매자 역할 부여")
-                except Exception as e:
-                    print(f"[ROLE_ERROR] {e}")
 
 class RedVendingView(discord.ui.View):
     def __init__(self):
@@ -369,8 +351,8 @@ class RedVendingView(discord.ui.View):
         embed.add_field(name="💰 현재 포인트", value=f"{points:,}P", inline=False)
         embed.add_field(name="💸 누적 사용 포인트", value=f"{total_spent:,}P", inline=False)
         if orders:
-            order_list = [f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders]
-            embed.add_field(name="📦 구매 내역", value="\n".join(order_list), inline=False)
+            order_list = "\n".join([f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders])
+            embed.add_field(name="📦 구매 내역", value=order_list, inline=False)
         else:
             embed.add_field(name="📦 구매 내역", value="아직 구매 내역이 없습니다.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -378,7 +360,7 @@ class RedVendingView(discord.ui.View):
     @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="red_buy")
     async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = ProductSelectView()
-        embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 아래 메뉴에서 선택해 주세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
+        embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 class BuyerRedVendingView(discord.ui.View):
@@ -390,11 +372,10 @@ class BuyerRedVendingView(discord.ui.View):
         user = interaction.user
         points = get_points(user.id)
         embed = discord.Embed(
-            title="💳 충전 안내 (구매자 전용)",
+            title="💳 충전 안내",
             description=(
-                f"**아래 계좌로 입금 후, 관리자에게 입금 사실을 알려주세요.**\n\n"
-                f"🏦 은행: 농협은행\n💳 계좌: `3521617659683`\n👤 예금주: 김대훈\n\n"
-                f"📢 입금 완료 후 관리자에게 DM 또는 채팅으로 알려주시면 포인트를 지급해 드립니다.\n\n"
+                f"**아래 계좌로 입금 후, 관리자에게 알려주세요.**\n\n"
+                f"🏦 농협은행\n💳 `3521617659683`\n👤 김대훈\n\n"
                 f"📊 현재 포인트: **{points:,}P**"
             ),
             color=0x27ae60,
@@ -413,8 +394,8 @@ class BuyerRedVendingView(discord.ui.View):
         embed.add_field(name="💰 현재 포인트", value=f"{points:,}P", inline=False)
         embed.add_field(name="💸 누적 사용 포인트", value=f"{total_spent:,}P", inline=False)
         if orders:
-            order_list = [f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders]
-            embed.add_field(name="📦 구매 내역", value="\n".join(order_list), inline=False)
+            order_list = "\n".join([f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders])
+            embed.add_field(name="📦 구매 내역", value=order_list, inline=False)
         else:
             embed.add_field(name="📦 구매 내역", value="아직 구매 내역이 없습니다.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -422,92 +403,60 @@ class BuyerRedVendingView(discord.ui.View):
     @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="buyer_red_buy")
     async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = ProductSelectView()
-        embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 아래 메뉴에서 선택해 주세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
+        embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-# ==============================
-# 관리자 충전 명령어
-# ==============================
 @bot.command(name="충전")
 @commands.has_permissions(administrator=True)
 async def charge_cmd(ctx: commands.Context, member: discord.Member, amount: int):
     if amount <= 0:
-        await ctx.reply("❌ 0원 이상의 금액을 입력하세요.", delete_after=5)
+        await ctx.reply("❌ 0원 이상 입력하세요.", delete_after=5)
         return
     new_balance = add_points(member.id, amount)
-    await ctx.reply(f"✅ {member.mention} 님에게 {amount:,}P 충전 완료.\n현재 포인트: **{new_balance:,}P**", mention_author=False)
-    dm_embed = discord.Embed(title="💰 충전 완료", description=f"**충전 포인트:** {amount:,}P\n**현재 포인트:** {new_balance:,}P", color=0x3498db)
-    dm_embed.set_footer(text="문의사항은 관리자에게 문의하세요.")
+    await ctx.reply(f"✅ {member.mention} 님에게 {amount:,}P 충전 완료. 현재 포인트: **{new_balance:,}P**")
+    dm_embed = discord.Embed(title="💰 충전 완료", description=f"{amount:,}P가 충전되었습니다.\n현재 포인트: {new_balance:,}P", color=0x3498db)
     await safe_dm_embed(member, dm_embed)
 
-@charge_cmd.error
-async def charge_error(ctx: commands.Context, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.reply("❌ 관리자만 사용할 수 있습니다.", delete_after=5)
-    else:
-        await ctx.reply("❌ 사용법: `.충전 @유저 금액`", delete_after=5)
-
-# ==============================
-# 패널 생성 명령어
-# ==============================
 @bot.command(name="레드코리아패널")
 @commands.has_permissions(administrator=True)
 async def create_red_panel(ctx: commands.Context):
-    embed = discord.Embed(title="🔴 RED KOREA - 탈콥", description="**🤖 디스코드 자동 자판기 🔄**\n\n버튼을 눌러 서비스를 이용하세요.", color=0xe74c3c)
-    embed.set_footer(text="상담 환영 · 문의는 티켓")
+    embed = discord.Embed(title="🔴 RED KOREA - 탈콥", description="**🤖 디스코드 자판기**\n버튼을 눌러 서비스를 이용하세요.", color=0xe74c3c)
     view = RedVendingView()
     await ctx.send(embed=embed, view=view)
 
 @bot.command(name="레드코리아패널구매자")
 @commands.has_permissions(administrator=True)
 async def create_buyer_red_panel(ctx: commands.Context):
-    embed = discord.Embed(title="🔴 RED KOREA - 탈콥 (구매자 전용)", description="**🤖 디스코드 자동 자판기 🔄**\n\n버튼을 눌러 서비스를 이용하세요.", color=0xe74c3c)
-    embed.set_footer(text="구매자 전용 패널")
+    embed = discord.Embed(title="🔴 RED KOREA (구매자 전용)", description="**🤖 디스코드 자판기**\n버튼을 눌러 서비스를 이용하세요.", color=0xe74c3c)
     view = BuyerRedVendingView()
     await ctx.send(embed=embed, view=view)
 
 @bot.command(name="코드추가")
 @commands.has_permissions(administrator=True)
 async def add_code_cmd(ctx: commands.Context, product_id: str, *codes: str):
-    valid_ids = [p["id"] for p in RED_PRODUCTS]
+    valid_ids = [p["id"] for p in PRODUCTS]
     if product_id not in valid_ids:
-        await ctx.reply(f"❌ 유효한 상품 ID가 아닙니다. 가능: {', '.join(valid_ids)}", delete_after=10)
+        await ctx.reply(f"❌ 유효한 상품 ID: {', '.join(valid_ids)}", delete_after=10)
         return
     if not codes:
-        await ctx.reply("❌ 추가할 코드를 입력하세요. 예: .코드추가 wolf_lite ABC-123 DEF-456", delete_after=10)
+        await ctx.reply("❌ 추가할 코드를 입력하세요.", delete_after=10)
         return
     added = sum(1 for code in codes if add_product_code(product_id, code.strip()))
-    failed = len(codes) - added
-    await ctx.reply(f"✅ {added}개 추가 완료, {failed}개 실패 (중복 등)", delete_after=10)
+    await ctx.reply(f"✅ {added}개 추가 완료, {len(codes)-added}개 실패", delete_after=10)
 
 @bot.command(name="코드목록")
 @commands.has_permissions(administrator=True)
 async def list_codes_cmd(ctx: commands.Context, product_id: str = None):
     if product_id is None:
         lines = []
-        for p in RED_PRODUCTS:
+        for p in PRODUCTS:
             codes = get_unused_codes(p["id"])
-            if codes:
-                lines.append(f"**{p['name']}** (`{p['id']}`): {len(codes)}개")
-                if len(codes) <= 10:
-                    lines.append(f"  `{', '.join(codes)}`")
-                else:
-                    lines.append(f"  첫 10개: `{', '.join(codes[:10])}` ...")
-            else:
-                lines.append(f"**{p['name']}** (`{p['id']}`): 0개")
+            lines.append(f"**{p['name']}** (`{p['id']}`): {len(codes)}개")
         await ctx.reply("\n".join(lines), delete_after=30)
     else:
-        valid_ids = [p["id"] for p in RED_PRODUCTS]
-        if product_id not in valid_ids:
-            await ctx.reply(f"❌ 유효한 상품 ID가 아닙니다. 가능: {', '.join(valid_ids)}", delete_after=10)
-            return
         codes = get_unused_codes(product_id)
         if codes:
-            display = codes[:30]
-            msg = f"**{product_id}** 미사용 코드 ({len(codes)}개):\n`" + "`, `".join(display) + "`"
-            if len(codes) > 30:
-                msg += f"\n... 외 {len(codes)-30}개"
-            await ctx.reply(msg, delete_after=30)
+            await ctx.reply(f"**{product_id}** 미사용 코드 ({len(codes)}개):\n`" + "`, `".join(codes[:30]) + "`", delete_after=30)
         else:
             await ctx.reply(f"**{product_id}**에 미사용 코드가 없습니다.", delete_after=10)
 
@@ -517,16 +466,15 @@ async def delete_code_cmd(ctx: commands.Context, *, code: str):
     if delete_code(code):
         await ctx.reply(f"✅ 코드 `{code}` 삭제 완료.", delete_after=10)
     else:
-        await ctx.reply(f"❌ 코드 `{code}`를 찾을 수 없습니다.", delete_after=10)
+        await ctx.reply(f"❌ 코드 `{code}` 없음.", delete_after=10)
 
 async def cycle_status():
     await bot.wait_until_ready()
     while not bot.is_closed():
         text = next(status_cycle)
         try:
-            await bot.change_presence(status=discord.Status.online, activity=discord.Activity(type=discord.ActivityType.watching, name=text))
-        except Exception as e:
-            print(f"[status_cycle] error: {e}")
+            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=text))
+        except:
             break
         await asyncio.sleep(15)
 
@@ -542,13 +490,10 @@ def run_bot():
         print(f"봇 실행 오류: {e}")
 
 # ==============================
-# Flask 웹 라우트 (충전 요청)
+# Flask 웹 라우트
 # ==============================
 def get_discord_user(access_token):
-    resp = requests.get(
-        "https://discord.com/api/users/@me",
-        headers={"Authorization": f"Bearer {access_token}"}
-    )
+    resp = requests.get("https://discord.com/api/users/@me", headers={"Authorization": f"Bearer {access_token}"})
     if resp.status_code == 200:
         return resp.json()
     return None
@@ -594,34 +539,55 @@ def api_points():
         return jsonify({"points": 0})
     return jsonify({"points": get_points(user_id)})
 
+@app.route("/api/buy", methods=["POST"])
+def api_buy():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "로그인 필요"}), 401
+    data = request.get_json()
+    product_id = data.get("product_id")
+    product = next((p for p in PRODUCTS if p["id"] == product_id), None)
+    if not product:
+        return jsonify({"ok": False, "error": "상품 없음"}), 400
+    price = product["price"]
+    product_name = product["name"]
+    new_balance = remove_points(user_id, price)
+    if new_balance is None:
+        current = get_points(user_id)
+        return jsonify({"ok": False, "error": f"포인트 부족 (필요: {price:,}P / 보유: {current:,}P)"}), 400
+    code = get_unused_code(product_id)
+    if code is None:
+        add_points(user_id, price)
+        return jsonify({"ok": False, "error": "재고 부족"}), 400
+    insert_order(user_id, product_name, price, code)
+    # 웹훅 전송 (디스코드 구매와 동일)
+    admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** <@{user_id}> (`{user_id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
+    try:
+        requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
+    except: pass
+    buy_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
+    try:
+        requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
+    except: pass
+    return jsonify({"ok": True, "code": code, "new_balance": new_balance})
+
 @app.route("/api/charge-request", methods=["POST"])
 def api_charge_request():
     user_id = session.get("user_id")
     if not user_id:
-        return jsonify({"ok": False, "error": "로그인이 필요합니다."}), 401
+        return jsonify({"ok": False, "error": "로그인 필요"}), 401
     data = request.get_json()
     amount = data.get("amount")
     if not amount or amount < 1:
-        return jsonify({"ok": False, "error": "충전 금액을 입력해주세요"}), 400
+        return jsonify({"ok": False, "error": "1원 이상 입력"}), 400
     order_num = create_charge_request(user_id, amount)
-    # 🔥 관리자 채널 웹훅으로만 전송 (구매 로그 채널에는 안 감)
-    content = (
-        f"💳 **충전 요청 접수**\n"
-        f"유저: <@{user_id}>\n"
-        f"금액: {amount:,}원\n"
-        f"주문번호: `{order_num}`\n"
-        f"계좌: 3521617659683 (농협, 김대훈)\n"
-        f"입금 확인 후 `.충전 <@{user_id}> {amount}` 명령어로 포인트를 지급하세요."
-    )
+    content = f"💳 **충전 요청**\n유저: <@{user_id}>\n금액: {amount:,}원\n주문번호: `{order_num}`\n계좌: 3521617659683 (농협, 김대훈)\n입금 확인 후 `.충전 <@{user_id}> {amount}`"
     try:
         requests.post(ADMIN_WEBHOOK_URL, json={"content": content}, timeout=3)
-    except Exception as e:
-        print(f"[WEBHOOK_ERROR] {e}")
+    except: pass
     return jsonify({"ok": True, "order_number": order_num})
 
-# ==============================
-# 웹 디자인 (중앙 정렬)
-# ==============================
+# HTML 템플릿 (홈쇼핑 스타일 + 구매내역)
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -638,104 +604,107 @@ index_html = """
             font-family: 'Inter', sans-serif;
             color: #eef2ff;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 1.5rem;
+            padding: 2rem 1.5rem;
         }
+        .container { max-width: 1280px; margin: 0 auto; }
         .glass-card {
             background: rgba(15,23,42,0.65);
             backdrop-filter: blur(16px);
             border-radius: 2rem;
             border: 1px solid rgba(96,165,250,0.25);
-            box-shadow: 0 25px 45px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.02);
-            max-width: 540px;
-            width: 100%;
-            padding: 2rem 1.8rem;
-            transition: transform 0.2s;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
         }
-        .glass-card:hover { transform: translateY(-2px); border-color: rgba(96,165,250,0.5); }
-        .logo {
-            font-size: 2rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #ffffff, #a78bfa, #ff4b6e);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-        .user-section {
-            background: rgba(0,0,0,0.35);
-            border-radius: 2rem;
-            padding: 0.7rem 1.2rem;
+        .header {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
             flex-wrap: wrap;
             gap: 1rem;
-            margin-bottom: 1.8rem;
-            border: 1px solid rgba(96,165,250,0.2);
         }
-        .user-info { display: flex; align-items: center; gap: 0.8rem; }
-        .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #60a5fa; object-fit: cover; }
-        .username { font-weight: 600; font-size: 0.9rem; }
-        .points-badge { background: rgba(255,180,71,0.15); padding: 0.35rem 0.9rem; border-radius: 40px; font-size: 0.8rem; font-weight: 600; color: #ffb347; }
-        .points-badge i { margin-right: 0.3rem; }
-        .login-btn { background: linear-gradient(135deg,#5865f2,#4752c4); color: white; text-decoration: none; padding: 0.5rem 1.2rem; border-radius: 40px; font-weight: 600; transition: 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
-        .login-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(88,101,242,0.4); }
-        .account-box { background: linear-gradient(135deg, rgba(37,99,235,0.15), rgba(147,51,234,0.1)); border-radius: 1.5rem; padding: 1.5rem; margin: 1.5rem 0; text-align: center; border: 1px solid rgba(96,165,250,0.3); }
-        .account-box h2 { font-size: 1.2rem; margin-bottom: 0.8rem; }
-        .account-number { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg,#fff,#ffb347); -webkit-background-clip: text; background-clip: text; color: transparent; letter-spacing: 2px; margin: 0.5rem 0; }
-        .charge-btn { background: linear-gradient(135deg,#ff4b6e,#ff6b4a); border: none; padding: 0.7rem 1.8rem; border-radius: 40px; font-weight: 700; color: white; cursor: pointer; margin-top: 1rem; transition: 0.2s; }
-        .charge-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(255,75,110,0.4); }
-        .footer { text-align: center; margin-top: 2rem; color: #6c6c7a; font-size: 0.7rem; }
-        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #1e1a2f; backdrop-filter: blur(20px); padding: 1.8rem; border-radius: 1.5rem; z-index: 1000; width: 300px; text-align: center; border: 1px solid rgba(255,75,110,0.5); box-shadow: 0 20px 35px rgba(0,0,0,0.5); }
-        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 999; }
-        input { width: 100%; padding: 0.6rem; margin: 1rem 0; border-radius: 12px; border: 1px solid #4b5563; background: #0f172a; color: white; font-size: 1rem; text-align: center; }
-        .modal button { background: #ff4b6e; border: none; padding: 0.5rem 1rem; border-radius: 30px; color: white; cursor: pointer; margin: 0 0.5rem; font-weight: 600; transition: 0.1s; }
-        .modal button:active { transform: scale(0.96); }
-        @media (max-width: 500px) { .glass-card { padding: 1.5rem; } .account-number { font-size: 1.2rem; } }
+        .logo { font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg,#fff,#a78bfa,#ff4b6e); -webkit-background-clip:text; background-clip:text; color:transparent; }
+        .user-info { display: flex; align-items: center; gap: 1rem; background: rgba(0,0,0,0.35); padding: 0.5rem 1rem; border-radius: 60px; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #60a5fa; }
+        .points { color: #ffb347; font-weight: 700; }
+        .nav-links { display: flex; gap: 1rem; }
+        .nav-link { color: #cbd5e1; text-decoration: none; padding: 0.5rem 1rem; border-radius: 40px; transition: 0.2s; }
+        .nav-link:hover, .nav-link.active { background: rgba(96,165,250,0.2); color: white; }
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        .product-card {
+            background: rgba(0,0,0,0.4);
+            border-radius: 1.5rem;
+            overflow: hidden;
+            border: 1px solid rgba(96,165,250,0.2);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .product-card:hover { transform: translateY(-4px); border-color: #60a5fa; }
+        .product-img { width: 100%; height: 200px; object-fit: cover; }
+        .product-info { padding: 1.2rem; }
+        .product-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .product-desc { font-size: 0.85rem; color: #9ca3af; margin-bottom: 1rem; }
+        .product-price { font-size: 1.4rem; font-weight: 800; color: #ffb347; margin-bottom: 1rem; }
+        .buy-btn { background: linear-gradient(135deg,#ff4b6e,#ff6b4a); border: none; width: 100%; padding: 0.7rem; border-radius: 40px; font-weight: 700; color: white; cursor: pointer; transition: 0.2s; }
+        .buy-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(255,75,110,0.4); }
+        .orders-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .orders-table th, .orders-table td { padding: 0.8rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .orders-table th { color: #9ca3af; font-weight: 500; }
+        .code-cell { font-family: monospace; background: #0f172a; padding: 0.2rem 0.5rem; border-radius: 8px; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #1e1a2f; backdrop-filter: blur(20px); padding: 1.8rem; border-radius: 1.5rem; z-index: 1000; width: 300px; text-align: center; border: 1px solid #ff4b6e; }
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; }
+        input { width: 100%; padding: 0.6rem; margin: 1rem 0; border-radius: 12px; border: 1px solid #4b5563; background: #0f172a; color: white; text-align: center; }
+        .modal button { background: #ff4b6e; border: none; padding: 0.5rem 1rem; border-radius: 30px; color: white; cursor: pointer; margin: 0 0.5rem; }
+        .footer { text-align: center; color: #6c6c7a; font-size: 0.7rem; margin-top: 2rem; }
+        @media (max-width: 640px) { .product-grid { grid-template-columns: 1fr; } .header { flex-direction: column; } }
     </style>
 </head>
 <body>
-<div class="glass-card">
-    <div class="logo">RED+RLNL</div>
-    <div class="user-section">
-        {% if user_id %}
-        <div class="user-info">
-            <img class="avatar" src="{{ avatar }}" alt="avatar">
-            <span class="username">{{ username }}</span>
+<div class="container">
+    <div class="glass-card">
+        <div class="header">
+            <div class="logo">RED+RLNL</div>
+            <div class="user-info">
+                {% if user_id %}
+                <img class="avatar" src="{{ avatar }}">
+                <span>{{ username }}</span>
+                <span class="points"><i class="fas fa-coins"></i> <span id="points">0</span> P</span>
+                <a href="/auth/logout" style="color:#ff6b4a;"><i class="fas fa-sign-out-alt"></i></a>
+                {% else %}
+                <a href="/auth/login" style="background:#5865f2; padding:0.5rem 1rem; border-radius:40px; text-decoration:none; color:white;"><i class="fab fa-discord"></i> 로그인</a>
+                {% endif %}
+            </div>
         </div>
-        <div class="points-badge"><i class="fas fa-coins"></i> <span id="points">0</span> P</div>
-        <a href="/auth/logout" style="color:#ff6b4a; text-decoration:none;"><i class="fas fa-sign-out-alt"></i></a>
-        {% else %}
-        <a href="/auth/login" class="login-btn"><i class="fab fa-discord"></i> 디스코드 로그인</a>
-        {% endif %}
+        <div class="nav-links">
+            <a href="/" class="nav-link active">🏠 상품</a>
+            <a href="/orders" class="nav-link">📦 구매내역</a>
+        </div>
     </div>
-    {% if user_id %}
-    <div class="account-box">
-        <h2><i class="fas fa-university"></i> 입금 계좌 정보</h2>
-        <p>아래 계좌로 입금 후, 관리자에게 입금 사실을 알려주세요.</p>
-        <div class="account-number">3521617659683</div>
-        <p>예금주: 김대훈 | 농협은행</p>
-        <button id="chargeBtn" class="charge-btn"><i class="fas fa-bolt"></i> 충전 요청</button>
+
+    <div class="glass-card">
+        <div class="product-grid" id="productGrid"></div>
     </div>
-    {% endif %}
+
     <div class="footer">© 2026 RED | 프리미엄 서비스</div>
 </div>
+
 <div id="modalOverlay" class="overlay"></div>
 <div id="chargeModal" class="modal">
-    <h3>💳 충전 금액</h3>
-    <input type="number" id="chargeAmount" placeholder="금액 (원)" min="1" step="1" autocomplete="off">
+    <h3>💳 충전 요청</h3>
+    <input type="number" id="chargeAmount" placeholder="금액 (원)" min="1" step="1">
     <div>
         <button id="confirmChargeBtn">요청</button>
         <button id="closeModalBtn">닫기</button>
     </div>
 </div>
+
 <script>
     const userLoggedIn = {{ "true" if user_id else "false" }};
-    let toastTimer = null;
+    const products = {{ PRODUCTS|tojson }};
+
     function showToast(msg) {
         let toast = document.getElementById('toastMsg');
         if (!toast) {
@@ -749,55 +718,212 @@ index_html = """
             toast.style.padding = '8px 20px';
             toast.style.borderRadius = '40px';
             toast.style.zIndex = '1001';
-            toast.style.fontSize = '0.8rem';
             toast.style.border = '1px solid #ff4b6e';
             document.body.appendChild(toast);
         }
-        if (toastTimer) clearTimeout(toastTimer);
         toast.textContent = msg;
         toast.style.opacity = '1';
-        toastTimer = setTimeout(() => toast.style.opacity = '0', 3000);
+        setTimeout(() => toast.style.opacity = '0', 3000);
     }
+
     async function refreshPoints() {
         if (!userLoggedIn) return;
         try {
             const res = await fetch('/api/points');
             const data = await res.json();
             document.getElementById('points').innerText = (data.points || 0).toLocaleString();
-        } catch(e) { console.error(e); }
+        } catch(e) {}
     }
-    refreshPoints();
-    setInterval(refreshPoints, 30000);
+
+    async function buyProduct(productId, productName, price) {
+        try {
+            const res = await fetch('/api/buy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id: productId })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                showToast(`✅ 구매 완료! 코드: ${data.code}`);
+                refreshPoints();
+            } else {
+                showToast(data.error || "구매 실패");
+            }
+        } catch(e) {
+            showToast("네트워크 오류");
+        }
+    }
+
+    function renderProducts() {
+        const grid = document.getElementById('productGrid');
+        grid.innerHTML = '';
+        products.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'product-card';
+            card.innerHTML = `
+                <img class="product-img" src="${p.img}" alt="${p.name}">
+                <div class="product-info">
+                    <div class="product-title">${p.name}</div>
+                    <div class="product-desc">${p.desc}</div>
+                    <div class="product-price">${p.price.toLocaleString()}P</div>
+                    <button class="buy-btn" data-id="${p.id}" data-name="${p.name}" data-price="${p.price}">🛒 구매하기</button>
+                </div>
+            `;
+            const btn = card.querySelector('.buy-btn');
+            btn.addEventListener('click', () => buyProduct(p.id, p.name, p.price));
+            grid.appendChild(card);
+        });
+    }
+
     if (userLoggedIn) {
+        renderProducts();
+        refreshPoints();
+        setInterval(refreshPoints, 30000);
+
         const modal = document.getElementById('chargeModal');
         const overlay = document.getElementById('modalOverlay');
         const chargeBtn = document.getElementById('chargeBtn');
-        const closeBtn = document.getElementById('closeModalBtn');
-        const confirmBtn = document.getElementById('confirmChargeBtn');
-        const amountInput = document.getElementById('chargeAmount');
-        function showModal() { modal.style.display = 'block'; overlay.style.display = 'block'; }
-        function hideModal() { modal.style.display = 'none'; overlay.style.display = 'none'; }
-        chargeBtn.onclick = showModal;
-        closeBtn.onclick = hideModal;
-        overlay.onclick = hideModal;
-        confirmBtn.onclick = async () => {
-            const amount = parseInt(amountInput.value);
+        if (chargeBtn) {
+            chargeBtn.onclick = () => { modal.style.display = 'block'; overlay.style.display = 'block'; };
+        }
+        document.getElementById('closeModalBtn').onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
+        overlay.onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
+        document.getElementById('confirmChargeBtn').onclick = async () => {
+            const amount = parseInt(document.getElementById('chargeAmount').value);
             if (!amount || amount < 1) { showToast("1원 이상 입력하세요."); return; }
-            try {
-                const res = await fetch('/api/charge-request', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amount: amount })
-                });
-                const data = await res.json();
-                if (data.ok) {
-                    alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n관리자가 확인 후 포인트를 지급합니다.`);
-                    hideModal();
-                    amountInput.value = '';
-                } else { showToast(data.error || "오류 발생"); }
-            } catch(e) { showToast("네트워크 오류"); }
+            const res = await fetch('/api/charge-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n관리자가 확인 후 충전합니다.`);
+                modal.style.display = 'none';
+                overlay.style.display = 'none';
+            } else { showToast(data.error); }
         };
+    } else {
+        document.getElementById('productGrid').innerHTML = '<div style="text-align:center; padding:2rem;">🔒 로그인 후 상품을 볼 수 있습니다.</div>';
     }
+</script>
+</body>
+</html>
+"""
+
+orders_html = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 구매내역 | RED</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            background: radial-gradient(circle at 10% 20%, #0f0c1f, #02010a);
+            font-family: 'Inter', sans-serif;
+            color: #eef2ff;
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .glass-card {
+            background: rgba(15,23,42,0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 2rem;
+            border: 1px solid rgba(96,165,250,0.25);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .logo { font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg,#fff,#a78bfa,#ff4b6e); -webkit-background-clip:text; background-clip:text; color:transparent; }
+        .user-info { display: flex; align-items: center; gap: 1rem; background: rgba(0,0,0,0.35); padding: 0.5rem 1rem; border-radius: 60px; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #60a5fa; }
+        .points { color: #ffb347; font-weight: 700; }
+        .nav-links { display: flex; gap: 1rem; margin-top: 1rem; }
+        .nav-link { color: #cbd5e1; text-decoration: none; padding: 0.5rem 1rem; border-radius: 40px; transition: 0.2s; }
+        .nav-link:hover, .nav-link.active { background: rgba(96,165,250,0.2); color: white; }
+        .orders-table { width: 100%; border-collapse: collapse; }
+        .orders-table th, .orders-table td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .orders-table th { color: #9ca3af; font-weight: 500; }
+        .code-cell { font-family: monospace; background: #0f172a; padding: 0.2rem 0.6rem; border-radius: 8px; display: inline-block; }
+        .empty-msg { text-align: center; padding: 2rem; color: #9ca3af; }
+        .footer { text-align: center; color: #6c6c7a; font-size: 0.7rem; margin-top: 2rem; }
+        @media (max-width: 640px) { .orders-table th, .orders-table td { padding: 0.6rem; font-size: 0.8rem; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="glass-card">
+        <div class="header">
+            <div class="logo">RED+RLNL</div>
+            <div class="user-info">
+                {% if user_id %}
+                <img class="avatar" src="{{ avatar }}">
+                <span>{{ username }}</span>
+                <span class="points"><i class="fas fa-coins"></i> <span id="points">0</span> P</span>
+                <a href="/auth/logout" style="color:#ff6b4a;"><i class="fas fa-sign-out-alt"></i></a>
+                {% else %}
+                <a href="/auth/login" style="background:#5865f2; padding:0.5rem 1rem; border-radius:40px; text-decoration:none; color:white;"><i class="fab fa-discord"></i> 로그인</a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">🏠 상품</a>
+            <a href="/orders" class="nav-link active">📦 구매내역</a>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <h2 style="margin-bottom: 1rem;">📋 내 구매 내역</h2>
+        <div id="ordersList"></div>
+    </div>
+    <div class="footer">© 2026 RED | 프리미엄 서비스</div>
+</div>
+<script>
+    async function loadOrders() {
+        try {
+            const res = await fetch('/api/orders');
+            const data = await res.json();
+            const container = document.getElementById('ordersList');
+            if (!data.orders || data.orders.length === 0) {
+                container.innerHTML = '<div class="empty-msg">아직 구매 내역이 없습니다.</div>';
+                return;
+            }
+            let html = `<table class="orders-table"><thead><tr><th>상품명</th><th>금액</th><th>발급 코드</th><th>구매일시</th></tr></thead><tbody>`;
+            for (let o of data.orders) {
+                html += `<tr>
+                    <td>${o.product_name}</td>
+                    <td>${o.price.toLocaleString()}P</td>
+                    <td><span class="code-cell">${o.code}</span></td>
+                    <td>${o.created_at}</td>
+                </tr>`;
+            }
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        } catch(e) {
+            document.getElementById('ordersList').innerHTML = '<div class="empty-msg">불러오기 실패</div>';
+        }
+    }
+    async function refreshPoints() {
+        try {
+            const res = await fetch('/api/points');
+            const data = await res.json();
+            document.getElementById('points').innerText = (data.points || 0).toLocaleString();
+        } catch(e) {}
+    }
+    loadOrders();
+    refreshPoints();
+    setInterval(refreshPoints, 30000);
 </script>
 </body>
 </html>
@@ -805,7 +931,22 @@ index_html = """
 
 @app.route("/")
 def index():
-    return rts(index_html, user_id=session.get("user_id"), username=session.get("username"), avatar=session.get("avatar"))
+    return rts(index_html, user_id=session.get("user_id"), username=session.get("username"), avatar=session.get("avatar"), PRODUCTS=PRODUCTS)
+
+@app.route("/orders")
+def orders():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("index"))
+    return rts(orders_html, user_id=user_id, username=session.get("username"), avatar=session.get("avatar"))
+
+@app.route("/api/orders")
+def api_orders():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"orders": []})
+    orders_list = get_user_orders(user_id, limit=50)
+    return jsonify({"orders": orders_list})
 
 # ==============================
 # 실행
