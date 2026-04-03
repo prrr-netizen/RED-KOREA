@@ -859,7 +859,7 @@ index_html = """
         overlay.onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
         document.getElementById('confirmChargeBtn').onclick = async () => {
             const amount = parseInt(document.getElementById('chargeAmount').value);
-            if (!amount || amount < 1000) { alert("1,000원 이상 입력하세요."); return; }
+            if (!amount || amount < 1) { alert("이용 해주셔서 감사합니다,"); return; }
             const res = await fetch('/api/charge-request', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount}) });
             const data = await res.json();
             if (data.ok) {
