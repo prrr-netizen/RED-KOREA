@@ -40,10 +40,22 @@ ADMIN_CHANNEL_ID = 1488221287531679915
 REVIEW_CHANNEL_ID = 1487603259773419641
 INQUIRY_CHANNEL_ID = 1487602282257453238
 
-# 역할 ID (설정 필요)
+# 역할 ID
 GUILD_ID = 1487602282257453236
-NON_BUYER_ROLE_ID = 0  # 비구매자 역할 ID 입력
-BUYER_ROLE_ID = 0      # 구매자 역할 ID 입력
+NON_BUYER_ROLE_ID = 0  # @비구매자 역할 ID 입력
+BUYER_ROLE_ID = 0      # @구매자 역할 ID 입력
+
+# 계좌 정보
+BANK_NAME = "지역농협"
+ACCOUNT_NUMBER = "3521617659683"
+ACCOUNT_HOLDER = "김대훈"
+
+# 봇 상태 메시지 (순환)
+STATUS_MESSAGES = [
+    "💬 24시 문의 가능",
+    "🎉 첫 구매 15% 할인",
+    "🔴 RED KOREA"
+]
 
 # ==============================
 # 데이터베이스
@@ -54,13 +66,11 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    # users 테이블에 has_purchased 컬럼이 없으면 추가
     cur.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY, points INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, user_id BIGINT, product_name TEXT, price INTEGER, code TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     cur.execute("CREATE TABLE IF NOT EXISTS product_codes (id SERIAL PRIMARY KEY, product_id TEXT NOT NULL, code TEXT NOT NULL UNIQUE, used INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS charge_requests (id SERIAL PRIMARY KEY, order_number TEXT UNIQUE NOT NULL, user_id BIGINT NOT NULL, amount INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, processed INTEGER DEFAULT 0)")
     
-    # has_purchased 컬럼 추가 (없으면)
     try:
         cur.execute("ALTER TABLE users ADD COLUMN has_purchased INTEGER DEFAULT 0")
     except:
@@ -271,6 +281,8 @@ intents.members = True
 
 bot = commands.Bot(command_prefix=".", intents=intents)
 
+status_cycle = None
+
 async def update_user_role(user_id: int, is_buyer: bool):
     if not GUILD_ID or not NON_BUYER_ROLE_ID or not BUYER_ROLE_ID:
         return
@@ -287,6 +299,7 @@ async def update_user_role(user_id: int, is_buyer: bool):
             await member.remove_roles(non_role)
         if buyer_role and buyer_role not in member.roles:
             await member.add_roles(buyer_role)
+            print(f"✅ {member.name} 구매자 역할 부여됨")
     else:
         if buyer_role and buyer_role in member.roles:
             await member.remove_roles(buyer_role)
@@ -312,6 +325,16 @@ async def send_alerts(user_id, product_name, code, price, new_balance, is_first)
             embed.add_field(name="🎉 첫 구매", value="구매자 역할이 부여되었습니다.")
         await ch.send(embed=embed)
 
+async def cycle_status():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        for status in STATUS_MESSAGES:
+            try:
+                await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status))
+                await asyncio.sleep(15)
+            except:
+                break
+
 @bot.event
 async def on_ready():
     print(f"✅ 디스코드 봇 로그인: {bot.user}")
@@ -320,8 +343,11 @@ async def on_ready():
     guild = bot.get_guild(GUILD_ID)
     if guild:
         print(f"📌 서버: {guild.name}")
+        print(f"📌 비구매자 역할 ID: {NON_BUYER_ROLE_ID}")
+        print(f"📌 구매자 역할 ID: {BUYER_ROLE_ID}")
     
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=".도움말"))
+    # 상태 메시지 순환 시작
+    asyncio.create_task(cycle_status())
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -365,7 +391,7 @@ async def info_cmd(ctx):
 @bot.command(name="레드코리아패널")
 @commands.has_permissions(administrator=True)
 async def create_panel(ctx):
-    """일반 패널 생성 - 비구매자도 구매 가능, 충전은 구매자만"""
+    """일반 패널 - 비구매자 구매 가능, 첫 구매시 자동 등업, 충전은 구매자만"""
     
     embed = discord.Embed(
         title="🔴 RED KOREA 자판기",
@@ -375,7 +401,7 @@ async def create_panel(ctx):
     
     view = discord.ui.View(timeout=None)
     
-    # 구매 버튼
+    # ========== 구매 버튼 (모든 유저 가능) ==========
     async def buy_callback(interaction):
         await interaction.response.defer(ephemeral=True)
         
@@ -414,8 +440,9 @@ async def create_panel(ctx):
             after_purchase = has_purchased(user.id)
             is_first_purchase = (not before_purchase and after_purchase)
             
-            # 역할 업데이트
-            await update_user_role(user.id, True)
+            # 첫 구매면 역할 업데이트 (비구매자 -> 구매자)
+            if is_first_purchase:
+                await update_user_role(user.id, True)
             
             # 알림 전송
             await send_alerts(user.id, product["name"], code, product["price"], new_balance, is_first_purchase)
@@ -434,7 +461,7 @@ async def create_panel(ctx):
         view_select.add_item(select)
         await interaction.followup.send("📦 상품을 선택하세요:", view=view_select, ephemeral=True)
     
-    # 정보 버튼
+    # ========== 정보 버튼 (모든 유저 가능) ==========
     async def info_callback(interaction):
         await interaction.response.defer(ephemeral=True)
         user = interaction.user
@@ -452,7 +479,7 @@ async def create_panel(ctx):
         
         await interaction.followup.send(embed=embed_info, ephemeral=True)
     
-    # 충전 버튼 (구매자만 계좌 노출, 비구매자는 문의 안내)
+    # ========== 충전 버튼 (구매자만 계좌 노출, 비구매자는 문의 안내) ==========
     async def charge_callback(interaction):
         user = interaction.user
         is_buyer = has_purchased(user.id)
@@ -460,7 +487,7 @@ async def create_panel(ctx):
         if is_buyer:
             embed_charge = discord.Embed(
                 title="💰 충전 안내",
-                description="**계좌 정보**\n🏦 농협은행\n💳 `3521617659683`\n👤 김대훈\n\n입금 후 관리자에게 알려주세요.",
+                description=f"**계좌 정보**\n🏦 {BANK_NAME}\n💳 `{ACCOUNT_NUMBER}`\n👤 {ACCOUNT_HOLDER}\n\n입금 후 관리자에게 알려주세요.",
                 color=0x27ae60
             )
             await interaction.response.send_message(embed=embed_charge, ephemeral=True)
