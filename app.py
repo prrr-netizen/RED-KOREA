@@ -176,7 +176,6 @@ def get_user_orders(user_id: int, limit: int = 10) -> List[dict]:
     orders = []
     for row in rows:
         order = dict(row)
-        # datetime 객체를 문자열로 변환
         if isinstance(order["created_at"], datetime):
             order["created_at"] = order["created_at"].strftime("%Y-%m-%d %H:%M:%S")
         orders.append(order)
@@ -309,10 +308,11 @@ class ProductSelect(discord.ui.Select):
         super().__init__(placeholder="구매할 상품을 선택하세요", options=options, min_values=1, max_values=1)
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         product_id = self.values[0]
         product = next((p for p in PRODUCTS if p["id"] == product_id), None)
         if not product:
-            await interaction.response.send_message("❌ 오류", ephemeral=True)
+            await interaction.followup.send("❌ 오류", ephemeral=True)
             return
         user = interaction.user
         price = product["price"]
@@ -320,12 +320,12 @@ class ProductSelect(discord.ui.Select):
         new_balance = remove_points(user.id, price)
         if new_balance is None:
             current = get_points(user.id)
-            await interaction.response.send_message(f"❌ 포인트 부족 (필요: {price:,}P / 보유: {current:,}P)", ephemeral=True)
+            await interaction.followup.send(f"❌ 포인트 부족 (필요: {price:,}P / 보유: {current:,}P)", ephemeral=True)
             return
         code = get_unused_code(product_id)
         if code is None:
             add_points(user.id, price)
-            await interaction.response.send_message(f"❌ 재고 부족 - {product_name}", ephemeral=True)
+            await interaction.followup.send(f"❌ 재고 부족 - {product_name}", ephemeral=True)
             return
         insert_order(user.id, product_name, price, code)
         # 관리자 웹훅
@@ -341,7 +341,7 @@ class ProductSelect(discord.ui.Select):
         # DM
         dm_embed = discord.Embed(title="✅ 구매 완료", description=f"**상품명:** {product_name}\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
         await safe_dm_embed(user, dm_embed)
-        await interaction.response.send_message(f"✅ 구매 완료! 코드: `{code}` (DM으로도 전송)", ephemeral=True)
+        await interaction.followup.send(f"✅ 구매 완료! 코드: `{code}` (DM으로도 전송)", ephemeral=True)
 
 class AfterPurchaseView(discord.ui.View):
     def __init__(self, product_name: str):
@@ -406,13 +406,14 @@ class RedVendingView(discord.ui.View):
 
     @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="red_buy")
     async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         view = ProductSelectView()
         embed = discord.Embed(
             title="📦 상품 선택",
             description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.",
             color=0x3498db,
         )
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 class BuyerRedVendingView(discord.ui.View):
     def __init__(self):
@@ -459,13 +460,14 @@ class BuyerRedVendingView(discord.ui.View):
 
     @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="buyer_red_buy")
     async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         view = ProductSelectView()
         embed = discord.Embed(
             title="📦 상품 선택",
             description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.",
             color=0x3498db,
         )
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 # ========== 디스코드 명령어 ==========
 @bot.command(name="충전")
@@ -616,13 +618,9 @@ def api_charge_request():
     except: pass
     return jsonify({"ok": True, "order_number": order_num})
 
-# ========== HTML 템플릿 (생략 - 기존과 동일, 너무 길어서 생략) ==========
-# 실제 코드에서는 여기에 index_html과 orders_html이 그대로 들어갑니다.
-# 지면 관계상 생략했지만, 최종 파일에는 이전과 동일한 HTML이 포함됩니다.
-
-# 아래는 더미로 표시 (실제 코드에서는 이전 HTML을 복사해서 넣으세요)
-index_html = "<!DOCTYPE html>... (기존과 동일) ..."
-orders_html = "<!DOCTYPE html>... (기존과 동일) ..."
+# ========== HTML 템플릿 (기존과 동일, 지면상 생략) ==========
+index_html = """<!DOCTYPE html>... (기존 HTML 그대로) ..."""
+orders_html = """<!DOCTYPE html>... (기존 HTML 그대로) ..."""
 
 @app.route("/")
 def index():
