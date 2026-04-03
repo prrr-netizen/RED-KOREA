@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from itertools import cycle
-from typing import List, Optional
+from typing import List, Optional, Union
 
 try:
     import audioop
@@ -75,9 +75,34 @@ def init_db():
 init_db()
 
 # ==============================
-# DB 함수
+# 타입 안전 유틸리티 함수
 # ==============================
-def get_points(user_id: int) -> int:
+def to_int(value: Union[str, int, None]) -> Optional[int]:
+    """안전하게 int로 변환"""
+    if value is None:
+        return None
+    try:
+        return int(str(value).strip())
+    except (ValueError, TypeError):
+        return None
+
+def ensure_user_id() -> Optional[int]:
+    """session에서 user_id를 안전하게 int로 반환"""
+    raw_id = session.get("user_id")
+    if raw_id is None:
+        return None
+    user_id = to_int(raw_id)
+    if user_id is not None:
+        session["user_id"] = user_id  # 타입 정규화
+    return user_id
+
+# ==============================
+# DB 함수 (타입 안전)
+# ==============================
+def get_points(user_id: Union[int, str]) -> int:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return 0
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT points FROM users WHERE id = %s", (user_id,))
@@ -85,7 +110,10 @@ def get_points(user_id: int) -> int:
     conn.close()
     return row["points"] if row else 0
 
-def add_points(user_id: int, amount: int) -> int:
+def add_points(user_id: Union[int, str], amount: int) -> int:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return 0
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT points FROM users WHERE id = %s", (user_id,))
@@ -100,7 +128,10 @@ def add_points(user_id: int, amount: int) -> int:
     conn.close()
     return new_balance
 
-def remove_points(user_id: int, amount: int) -> Optional[int]:
+def remove_points(user_id: Union[int, str], amount: int) -> Optional[int]:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return None
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT points FROM users WHERE id = %s", (user_id,))
@@ -114,7 +145,10 @@ def remove_points(user_id: int, amount: int) -> Optional[int]:
     conn.close()
     return new_balance
 
-def insert_order(user_id: int, product_name: str, price: int, code: str) -> None:
+def insert_order(user_id: Union[int, str], product_name: str, price: int, code: str) -> None:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("INSERT INTO orders (user_id, product_name, price, code) VALUES (%s, %s, %s, %s)",
@@ -122,7 +156,10 @@ def insert_order(user_id: int, product_name: str, price: int, code: str) -> None
     conn.commit()
     conn.close()
 
-def get_user_orders(user_id: int, limit: int = 10) -> List[dict]:
+def get_user_orders(user_id: Union[int, str], limit: int = 10) -> List[dict]:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return []
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT product_name, price, code, created_at FROM orders WHERE user_id = %s ORDER BY created_at DESC LIMIT %s",
@@ -137,7 +174,10 @@ def get_user_orders(user_id: int, limit: int = 10) -> List[dict]:
         orders.append(order)
     return orders
 
-def get_user_total_spent(user_id: int) -> int:
+def get_user_total_spent(user_id: Union[int, str]) -> int:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return 0
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT COALESCE(SUM(price), 0) FROM orders WHERE user_id = %s", (user_id,))
@@ -196,7 +236,10 @@ def delete_code(code: str) -> bool:
     conn.close()
     return deleted
 
-def create_charge_request(user_id: int, amount: int) -> str:
+def create_charge_request(user_id: Union[int, str], amount: int) -> str:
+    user_id = to_int(user_id)
+    if user_id is None:
+        return ""
     while True:
         order_num = ''.join(random.choices(string.digits, k=6))
         conn = get_db_connection()
@@ -473,8 +516,18 @@ def run_bot():
         print(f"봇 실행 오류: {e}")
 
 # ==============================
-# Flask 웹 라우트
+# Flask 웹 라우트 (타입 안전)
 # ==============================
+@app.before_request
+def normalize_session():
+    """모든 요청 전에 session의 user_id를 int로 정규화"""
+    if session.get("user_id"):
+        user_id = to_int(session["user_id"])
+        if user_id is not None:
+            session["user_id"] = user_id
+        else:
+            session.pop("user_id", None)
+
 @app.route("/api/stock")
 def api_stock():
     stocks = {}
@@ -484,56 +537,125 @@ def api_stock():
 
 @app.route("/api/points")
 def api_points():
-    user_id = session.get("user_id")
+    user_id = ensure_user_id()
     if not user_id:
-        return jsonify({"points": 0})
+        return jsonify({"points": 0, "error": "not logged in"})
     return jsonify({"points": get_points(user_id)})
 
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
-    user_id = session.get("user_id")
+    """안전한 구매 API - 타입 에러 처리 완료"""
+    user_id = ensure_user_id()
     if not user_id:
-        return jsonify({"ok": False, "error": "로그인 필요"}), 401
-    data = request.get_json()
+        return jsonify({"ok": False, "error": "로그인이 필요합니다. 다시 로그인해주세요."}), 401
+    
+    # 요청 데이터 파싱
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"ok": False, "error": "잘못된 요청 형식입니다."}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"JSON 파싱 오류: {str(e)}"}), 400
+    
     product_id = data.get("product_id")
+    if not product_id:
+        return jsonify({"ok": False, "error": "상품 ID가 필요합니다."}), 400
+    
+    # 상품 찾기
     product = next((p for p in PRODUCTS if p["id"] == product_id), None)
     if not product:
-        return jsonify({"ok": False, "error": "상품 없음"}), 400
+        return jsonify({"ok": False, "error": f"존재하지 않는 상품입니다: {product_id}"}), 400
+    
     price = product["price"]
     product_name = product["name"]
+    
+    # 현재 포인트 확인
+    current_points = get_points(user_id)
+    
+    # 포인트 차감
     new_balance = remove_points(user_id, price)
     if new_balance is None:
-        current = get_points(user_id)
-        return jsonify({"ok": False, "error": f"포인트 부족 (필요: {price:,}P / 보유: {current:,}P)"}), 400
+        return jsonify({
+            "ok": False, 
+            "error": f"포인트 부족 (필요: {price:,}P / 보유: {current_points:,}P)"
+        }), 400
+    
+    # 코드 발급
     code = get_unused_code(product_id)
     if code is None:
+        # 롤백: 차감한 포인트 복구
         add_points(user_id, price)
-        return jsonify({"ok": False, "error": "재고 부족"}), 400
+        return jsonify({"ok": False, "error": f"재고 부족 - {product_name}"}), 400
+    
+    # 주문 저장
     insert_order(user_id, product_name, price, code)
-    admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** <@{user_id}> (`{user_id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
+    
+    # 웹훅 알림 (비동기, 에러 무시)
     try:
+        admin_embed = discord.Embed(
+            title="✅ 구매 발생 (관리자용)", 
+            description=f"**유저:** <@{user_id}> (`{user_id}`)\n"
+                       f"**상품명:** `{product_name}`\n"
+                       f"**발급 코드:** `{code}`\n"
+                       f"**차감 포인트:** {price:,}P\n"
+                       f"**남은 포인트:** {new_balance:,}P", 
+            color=0x2ecc71
+        )
         requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
-    except: pass
-    buy_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
+    except Exception as e:
+        print(f"[WEBHOOK_ERROR] admin: {e}")
+    
     try:
+        buy_embed = discord.Embed(
+            title="🛒 구매 발생", 
+            description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", 
+            color=0x2ecc71
+        )
         requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
-    except: pass
-    return jsonify({"ok": True, "code": code, "new_balance": new_balance})
+    except Exception as e:
+        print(f"[WEBHOOK_ERROR] buy_log: {e}")
+    
+    return jsonify({
+        "ok": True, 
+        "code": code, 
+        "new_balance": new_balance,
+        "product_name": product_name
+    })
 
 @app.route("/api/charge-request", methods=["POST"])
 def api_charge_request():
-    user_id = session.get("user_id")
+    user_id = ensure_user_id()
     if not user_id:
-        return jsonify({"ok": False, "error": "로그인 필요"}), 401
-    data = request.get_json()
+        return jsonify({"ok": False, "error": "로그인이 필요합니다."}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"ok": False, "error": "잘못된 요청 형식입니다."}), 400
+    except Exception:
+        return jsonify({"ok": False, "error": "JSON 파싱 오류"}), 400
+    
     amount = data.get("amount")
-    if not amount or amount < 1:
-        return jsonify({"ok": False, "error": "1원 이상 입력"}), 400
+    if not amount:
+        return jsonify({"ok": False, "error": "금액을 입력해주세요."}), 400
+    
+    try:
+        amount = int(amount)
+        if amount < 1:
+            return jsonify({"ok": False, "error": "1원 이상 입력해주세요."}), 400
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "올바른 금액을 입력해주세요."}), 400
+    
     order_num = create_charge_request(user_id, amount)
+    if not order_num:
+        return jsonify({"ok": False, "error": "주문번호 생성 실패"}), 500
+    
     content = f"💳 **충전 요청**\n유저: <@{user_id}>\n금액: {amount:,}원\n주문번호: `{order_num}`\n계좌: 3521617659683 (농협, 김대훈)\n입금 확인 후 `.충전 <@{user_id}> {amount}`"
     try:
         requests.post(ADMIN_WEBHOOK_URL, json={"content": content}, timeout=3)
-    except: pass
+    except Exception as e:
+        print(f"[WEBHOOK_ERROR] charge: {e}")
+    
     return jsonify({"ok": True, "order_number": order_num})
 
 # ==============================
@@ -609,6 +731,21 @@ index_html = """
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 999; }
         input { width: 100%; padding: 0.6rem; margin: 1rem 0; border-radius: 12px; border: 1px solid #4b5563; background: #0f172a; color: white; text-align: center; }
         .modal button { background: #ff4b6e; border: none; padding: 0.5rem 1rem; border-radius: 30px; color: white; cursor: pointer; margin: 0 0.5rem; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e1a2f;
+            padding: 12px 24px;
+            border-radius: 40px;
+            z-index: 1001;
+            border: 1px solid #ff4b6e;
+            color: white;
+            font-size: 0.9rem;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
         @media (max-width: 640px) { .product-grid { grid-template-columns: 1fr; } .header { flex-direction: column; } }
     </style>
 </head>
@@ -679,23 +816,16 @@ index_html = """
         } catch(e) { console.error(e); }
     }
 
-    function showToast(msg) {
+    function showToast(msg, isError = false) {
         let toast = document.getElementById('toastMsg');
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'toastMsg';
-            toast.style.position = 'fixed';
-            toast.style.bottom = '20px';
-            toast.style.left = '50%';
-            toast.style.transform = 'translateX(-50%)';
-            toast.style.background = '#1e1a2f';
-            toast.style.padding = '8px 20px';
-            toast.style.borderRadius = '40px';
-            toast.style.zIndex = '1001';
-            toast.style.border = '1px solid #ff4b6e';
+            toast.className = 'toast';
             document.body.appendChild(toast);
         }
         toast.textContent = msg;
+        toast.style.background = isError ? '#8b0000' : '#1e1a2f';
         toast.style.opacity = '1';
         setTimeout(() => toast.style.opacity = '0', 3000);
     }
@@ -705,7 +835,9 @@ index_html = """
         try {
             const res = await fetch('/api/points');
             const data = await res.json();
-            document.getElementById('points').innerText = (data.points || 0).toLocaleString();
+            if (data.points !== undefined) {
+                document.getElementById('points').innerText = (data.points || 0).toLocaleString();
+            }
         } catch(e) {}
     }
 
@@ -723,23 +855,24 @@ index_html = """
                 await fetchStock();
                 renderProducts();
             } else {
-                showToast(data.error || "구매 실패");
+                showToast(data.error || "구매 실패", true);
             }
         } catch(e) {
-            showToast("네트워크 오류");
+            showToast("네트워크 오류: " + e.message, true);
         }
     }
 
     function renderProducts() {
         if (!userLoggedIn) return;
         const grid = document.getElementById('productGrid');
+        if (!grid) return;
         grid.innerHTML = '';
         products.forEach(p => {
             const stock = stockData[p.id] || 0;
             const card = document.createElement('div');
             card.className = 'product-card';
             card.innerHTML = `
-                <img class="product-img" src="${p.img}" alt="${p.name}">
+                <img class="product-img" src="${p.img}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/300x200?text=RED'">
                 <div class="product-info">
                     <div class="product-title">${p.name}</div>
                     <div class="product-desc">${p.desc}</div>
@@ -759,28 +892,45 @@ index_html = """
         refreshPoints();
         setInterval(refreshPoints, 30000);
         setInterval(() => fetchStock().then(() => renderProducts()), 60000);
+    }
 
-        const modal = document.getElementById('chargeModal');
-        const overlay = document.getElementById('modalOverlay');
-        const chargeBtn = document.getElementById('chargeBtn');
-        if (chargeBtn) chargeBtn.onclick = () => { modal.style.display = 'block'; overlay.style.display = 'block'; };
-        document.getElementById('closeModalBtn').onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
-        overlay.onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
-        document.getElementById('confirmChargeBtn').onclick = async () => {
-            const amount = parseInt(document.getElementById('chargeAmount').value);
-            if (!amount || amount < 1) { showToast("1원 이상 입력하세요."); return; }
-            const res = await fetch('/api/charge-request', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ amount })
-            });
-            const data = await res.json();
-            if (data.ok) {
-                alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n관리자가 확인 후 충전합니다.`);
-                modal.style.display = 'none';
-                overlay.style.display = 'none';
-            } else { showToast(data.error); }
-        };
+    // 충전 모달
+    const modal = document.getElementById('chargeModal');
+    const overlay = document.getElementById('modalOverlay');
+    
+    if (modal && overlay) {
+        document.getElementById('closeModalBtn')?.addEventListener('click', () => {
+            modal.style.display = 'none';
+            overlay.style.display = 'none';
+        });
+        overlay.addEventListener('click', () => {
+            modal.style.display = 'none';
+            overlay.style.display = 'none';
+        });
+        document.getElementById('confirmChargeBtn')?.addEventListener('click', async () => {
+            const amount = parseInt(document.getElementById('chargeAmount')?.value);
+            if (!amount || amount < 1) {
+                showToast("1원 이상 입력하세요.", true);
+                return;
+            }
+            try {
+                const res = await fetch('/api/charge-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n관리자가 확인 후 충전합니다.`);
+                    modal.style.display = 'none';
+                    overlay.style.display = 'none';
+                } else {
+                    showToast(data.error || "충전 요청 실패", true);
+                }
+            } catch(e) {
+                showToast("네트워크 오류", true);
+            }
+        });
     }
 
     // 보안 스크립트
@@ -869,6 +1019,21 @@ orders_html = """
         .code-cell { font-family: monospace; background: #0f172a; padding: 0.2rem 0.6rem; border-radius: 8px; display: inline-block; }
         .empty-msg { text-align: center; padding: 2rem; color: #9ca3af; }
         .footer { text-align: center; color: #6c6c7a; font-size: 0.7rem; margin-top: 2rem; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e1a2f;
+            padding: 12px 24px;
+            border-radius: 40px;
+            z-index: 1001;
+            border: 1px solid #ff4b6e;
+            color: white;
+            font-size: 0.9rem;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
         @media (max-width: 640px) { .orders-table th, .orders-table td { padding: 0.6rem; font-size: 0.8rem; } }
     </style>
 </head>
@@ -929,14 +1094,16 @@ orders_html = """
         try {
             const res = await fetch('/api/points');
             const data = await res.json();
-            document.getElementById('points').innerText = (data.points || 0).toLocaleString();
+            if (data.points !== undefined) {
+                document.getElementById('points').innerText = (data.points || 0).toLocaleString();
+            }
         } catch(e) {}
     }
     loadOrders();
     refreshPoints();
     setInterval(refreshPoints, 30000);
 
-    // 보안 스크립트 (생략 - 동일)
+    // 보안 스크립트
     let blocked = false;
     function killPage() {
         if (blocked) return;
@@ -987,14 +1154,14 @@ def index():
 
 @app.route("/orders")
 def orders():
-    user_id = session.get("user_id")
+    user_id = ensure_user_id()
     if not user_id:
         return redirect(url_for("index"))
     return rts(orders_html, user_id=user_id, username=session.get("username"), avatar=session.get("avatar"))
 
 @app.route("/api/orders")
 def api_orders():
-    user_id = session.get("user_id")
+    user_id = ensure_user_id()
     if not user_id:
         return jsonify({"orders": []})
     orders_list = get_user_orders(user_id, limit=50)
