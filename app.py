@@ -1113,7 +1113,7 @@ def run_bot():
         print(f"봇 실행 오류: {e}")
 
 # ==============================
-# Flask 웹 라우트 (여기서부터 HTML 템플릿 index_html 앞까지)
+# Flask 웹 라우트 (HTML 템플릿 앞까지)
 # ==============================
 def get_discord_user(access_token):
     resp = requests.get(
@@ -1134,6 +1134,81 @@ def auth_login():
         f"&response_type=code"
         f"&scope=identify"
     )
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    code = request.args.get("code")
+    if not code:
+        return redirect(url_for("index"))
+
+    data = {
+        "client_id": DISCORD_CLIENT_ID,
+        "client_secret": DISCORD_CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": DISCORD_REDIRECT_URI,
+        "scope": "identify",
+    }
+    resp = requests.post("https://discord.com/api/oauth2/token", data=data)
+    if resp.status_code != 200:
+        return redirect(url_for("index"))
+
+    token_data = resp.json()
+    access_token = token_data.get("access_token")
+    user = get_discord_user(access_token)
+    if user:
+        session["user_id"] = int(user["id"])
+        session["username"] = f"{user['username']}#{user['discriminator']}"
+        session["avatar"] = (
+            f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png"
+            if user["avatar"]
+            else None
+        )
+
+    return redirect(url_for("index"))
+
+
+@app.route("/auth/logout")
+def auth_logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+
+@app.route("/api/points")
+def api_points():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"points": 0})
+    return jsonify({"points": get_points(user_id)})
+
+
+@app.route("/api/charge-request", methods=["POST"])
+def api_charge_request():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "로그인이 필요합니다."}), 401
+
+    data = request.get_json()
+    amount = data.get("amount")
+    if not amount or amount < 1:
+        return jsonify({"ok": False, "error": "충전 금액을 입력해주세요"}), 400
+
+    order_num = create_charge_request(user_id, amount)
+    content = (
+        "💳 **충전 요청 접수 (웹사이트)**\n"
+        f"유저 ID: <@{user_id}>\n"
+        f"금액: {amount:,}원\n"
+        f"주문번호: `{order_num}`\n"
+        "은행 입금 시 **입금자명에 주문번호 6자리만 입력**하세요."
+    )
+    try:
+        requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
+    except Exception:
+        pass
+
+    return jsonify({"ok": True, "order_number": order_num})
+
 
 # ==============================
 # 웹 디자인 (index_html 템플릿)
@@ -1543,79 +1618,5 @@ def run_app():
 
 
 if __name__ == "__main__":
-    # 디스코드 봇과 Flask를 같이 쓰려면, 보통은 스레드로 나눠서 실행함
     threading.Thread(target=run_bot, daemon=True).start()
     run_app()
-
-@app.route("/auth/callback")
-def auth_callback():
-    code = request.args.get("code")
-    if not code:
-        return redirect(url_for("index"))
-
-    data = {
-        "client_id": DISCORD_CLIENT_ID,
-        "client_secret": DISCORD_CLIENT_SECRET,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": DISCORD_REDIRECT_URI,
-        "scope": "identify",
-    }
-    resp = requests.post("https://discord.com/api/oauth2/token", data=data)
-    if resp.status_code != 200:
-        return redirect(url_for("index"))
-
-    token_data = resp.json()
-    access_token = token_data.get("access_token")
-    user = get_discord_user(access_token)
-    if user:
-        session["user_id"] = int(user["id"])
-        session["username"] = f"{user['username']}#{user['discriminator']}"
-        session["avatar"] = (
-            f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png"
-            if user["avatar"]
-            else None
-        )
-
-    return redirect(url_for("index"))
-
-
-@app.route("/auth/logout")
-def auth_logout():
-    session.clear()
-    return redirect(url_for("index"))
-
-
-@app.route("/api/points")
-def api_points():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"points": 0})
-    return jsonify({ "points": get_points(user_id) })
-
-
-@app.route("/api/charge-request", methods=["POST"])
-def api_charge_request():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"ok": False, "error": "로그인이 필요합니다."}), 401
-
-    data = request.get_json()
-    amount = data.get("amount")
-    if not amount or amount < 1:
-        return jsonify({"ok": False, "error": "충전 금액을 입력해주세요"}), 400
-
-    order_num = create_charge_request(user_id, amount)
-    content = (
-        "💳 **충전 요청 접수 (웹사이트)**\n"
-        f"유저 ID: <@{user_id}>\n"
-        f"금액: {amount:,}원\n"
-        f"주문번호: `{order_num}`\n"
-        "은행 입금 시 **입금자명에 주문번호 6자리만 입력**하세요."
-    )
-    try:
-        requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
-    except Exception:
-        pass
-
-    return jsonify({"ok": True, "order_number": order_num})
