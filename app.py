@@ -779,94 +779,364 @@ def api_charge_request():
         pass
     return jsonify({"ok": True, "order_number": order_num})
 
-# 간단한 HTML 템플릿 (이전과 유사)
+# ==============================
+# 최신 디자인 HTML (중앙 정렬, 글래스 모피즘)
+# ==============================
 index_html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>RED | 프리미엄 샵</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        body { background:#0a0a0c; color:#ededee; font-family:Inter; margin:0; padding:2rem; }
-        .container { max-width:1280px; margin:0 auto; }
-        .header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
-        .logo { font-size:1.8rem; font-weight:800; background:linear-gradient(135deg,#ff4b6e,#ff8c42); -webkit-background-clip:text; background-clip:text; color:transparent; }
-        .user-info { background:rgba(255,255,255,0.08); padding:0.5rem 1rem; border-radius:60px; display:flex; align-items:center; gap:1rem; }
-        .points { color:#ffb347; font-weight:700; }
-        .account-box { background:rgba(20,20,26,0.7); border-radius:28px; padding:1.5rem; margin:2rem 0; text-align:center; border:1px solid rgba(255,75,110,0.3); }
-        .account-number { font-size:1.8rem; font-weight:800; background:linear-gradient(135deg,#fff,#ffb347); -webkit-background-clip:text; background-clip:text; color:transparent; }
-        .charge-btn { background:linear-gradient(135deg,#ff4b6e,#ff6b4a); border:none; padding:0.8rem 2rem; border-radius:60px; font-weight:700; color:white; cursor:pointer; margin-top:1rem; }
-        .footer { text-align:center; margin-top:3rem; color:#6c6c7a; }
-        .modal { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#1e1a2f; padding:2rem; border-radius:20px; z-index:1000; width:300px; text-align:center; }
-        .overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999; }
-        input { width:100%; padding:0.5rem; margin:1rem 0; border-radius:8px; border:none; }
-        .modal button { background:#ff4b6e; border:none; padding:0.5rem 1rem; border-radius:8px; color:white; cursor:pointer; margin:0 0.5rem; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 10% 20%, #0f0c1f, #02010a);
+            font-family: 'Inter', sans-serif;
+            color: #eef2ff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 2rem;
+            border: 1px solid rgba(96, 165, 250, 0.25);
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.02);
+            max-width: 540px;
+            width: 100%;
+            padding: 2rem 1.8rem;
+            transition: transform 0.2s;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(96, 165, 250, 0.5);
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff, #a78bfa, #ff4b6e);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.5px;
+        }
+
+        .user-section {
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 2rem;
+            padding: 0.7rem 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.8rem;
+            border: 1px solid rgba(96, 165, 250, 0.2);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #60a5fa;
+            object-fit: cover;
+        }
+
+        .username {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .points-badge {
+            background: rgba(255, 180, 71, 0.15);
+            padding: 0.35rem 0.9rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #ffb347;
+        }
+
+        .points-badge i {
+            margin-right: 0.3rem;
+        }
+
+        .login-btn {
+            background: linear-gradient(135deg, #5865f2, #4752c4);
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 40px;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 14px rgba(88, 101, 242, 0.4);
+        }
+
+        .account-box {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(147, 51, 234, 0.1));
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            text-align: center;
+            border: 1px solid rgba(96, 165, 250, 0.3);
+        }
+
+        .account-box h2 {
+            font-size: 1.2rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .account-number {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #ffb347);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 2px;
+            margin: 0.5rem 0;
+        }
+
+        .charge-btn {
+            background: linear-gradient(135deg, #ff4b6e, #ff6b4a);
+            border: none;
+            padding: 0.7rem 1.8rem;
+            border-radius: 40px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .charge-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(255, 75, 110, 0.4);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 2rem;
+            color: #6c6c7a;
+            font-size: 0.7rem;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e1a2f;
+            backdrop-filter: blur(20px);
+            padding: 1.8rem;
+            border-radius: 1.5rem;
+            z-index: 1000;
+            width: 300px;
+            text-align: center;
+            border: 1px solid rgba(255, 75, 110, 0.5);
+            box-shadow: 0 20px 35px rgba(0,0,0,0.5);
+        }
+
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 999;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.6rem;
+            margin: 1rem 0;
+            border-radius: 12px;
+            border: 1px solid #4b5563;
+            background: #0f172a;
+            color: white;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        .modal button {
+            background: #ff4b6e;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            margin: 0 0.5rem;
+            font-weight: 600;
+            transition: 0.1s;
+        }
+
+        .modal button:active {
+            transform: scale(0.96);
+        }
+
+        @media (max-width: 500px) {
+            .glass-card {
+                padding: 1.5rem;
+            }
+            .account-number {
+                font-size: 1.2rem;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <div class="header">
-        <div class="logo">RED+RLNL</div>
+<div class="glass-card">
+    <div class="logo">RED+RLNL</div>
+
+    <div class="user-section">
+        {% if user_id %}
         <div class="user-info">
-            {% if user_id %}
-                <img src="{{ avatar }}" width="32" height="32" style="border-radius:50%;">
-                <span>{{ username }}</span>
-                <span class="points"><i class="fas fa-coins"></i> <span id="points">0</span> P</span>
-                <a href="/auth/logout" style="color:#ff6b4a;">로그아웃</a>
-            {% else %}
-                <a href="/auth/login" style="background:#5865f2; padding:0.5rem 1rem; border-radius:60px; text-decoration:none; color:white;">디스코드 로그인</a>
-            {% endif %}
+            <img class="avatar" src="{{ avatar }}" alt="avatar">
+            <span class="username">{{ username }}</span>
         </div>
+        <div class="points-badge">
+            <i class="fas fa-coins"></i> <span id="points">0</span> P
+        </div>
+        <a href="/auth/logout" style="color:#ff6b4a; text-decoration:none;"><i class="fas fa-sign-out-alt"></i></a>
+        {% else %}
+        <a href="/auth/login" class="login-btn"><i class="fab fa-discord"></i> 디스코드 로그인</a>
+        {% endif %}
     </div>
+
     {% if user_id %}
     <div class="account-box">
-        <h2>입금 계좌 정보</h2>
+        <h2><i class="fas fa-university"></i> 입금 계좌 정보</h2>
         <p>아래 계좌로 입금 후, 메모에 주문번호를 입력하세요.</p>
-        <p class="account-number">3521617659683</p>
+        <div class="account-number">3521617659683</div>
         <p>예금주: 김대훈 | 농협은행</p>
-        <button id="chargeBtn" class="charge-btn">충전 요청</button>
+        <button id="chargeBtn" class="charge-btn"><i class="fas fa-bolt"></i> 충전 요청</button>
     </div>
     {% endif %}
-    <div class="footer">© 2026 RED | 프리미엄 서비스</div>
+
+    <div class="footer">
+        © 2026 RED | 프리미엄 서비스
+    </div>
 </div>
+
 <div id="modalOverlay" class="overlay"></div>
 <div id="chargeModal" class="modal">
-    <h3>충전 금액 입력</h3>
-    <input type="number" id="chargeAmount" placeholder="금액 (원)" min="1" step="1">
+    <h3>💳 충전 금액</h3>
+    <input type="number" id="chargeAmount" placeholder="금액 (원)" min="1" step="1" autocomplete="off">
     <div>
         <button id="confirmChargeBtn">요청</button>
         <button id="closeModalBtn">닫기</button>
     </div>
 </div>
+
 <script>
     const userLoggedIn = {{ "true" if user_id else "false" }};
+    let toastTimer = null;
+    function showToast(msg) {
+        let toast = document.getElementById('toastMsg');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'toastMsg';
+            toast.style.position = 'fixed';
+            toast.style.bottom = '20px';
+            toast.style.left = '50%';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.background = '#1e1a2f';
+            toast.style.padding = '8px 20px';
+            toast.style.borderRadius = '40px';
+            toast.style.zIndex = '1001';
+            toast.style.fontSize = '0.8rem';
+            toast.style.border = '1px solid #ff4b6e';
+            document.body.appendChild(toast);
+        }
+        if (toastTimer) clearTimeout(toastTimer);
+        toast.textContent = msg;
+        toast.style.opacity = '1';
+        toastTimer = setTimeout(() => toast.style.opacity = '0', 3000);
+    }
+
     async function refreshPoints() {
         if (!userLoggedIn) return;
         try {
             const res = await fetch('/api/points');
             const data = await res.json();
             document.getElementById('points').innerText = (data.points || 0).toLocaleString();
-        } catch(e) {}
+        } catch(e) { console.error(e); }
     }
     refreshPoints();
     setInterval(refreshPoints, 30000);
+
     if (userLoggedIn) {
         const modal = document.getElementById('chargeModal');
         const overlay = document.getElementById('modalOverlay');
-        document.getElementById('chargeBtn').onclick = () => { modal.style.display = 'block'; overlay.style.display = 'block'; };
-        document.getElementById('closeModalBtn').onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
-        overlay.onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
-        document.getElementById('confirmChargeBtn').onclick = async () => {
-            const amount = parseInt(document.getElementById('chargeAmount').value);
-            if (!amount || amount < 1) { alert("1원 이상 입력하세요."); return; }
-            const res = await fetch('/api/charge-request', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount}) });
-            const data = await res.json();
-            if (data.ok) {
-                alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n계좌로 입금 후 메모에 주문번호를 입력하세요.`);
-                modal.style.display = 'none';
-                overlay.style.display = 'none';
-            } else alert(data.error);
+        const chargeBtn = document.getElementById('chargeBtn');
+        const closeBtn = document.getElementById('closeModalBtn');
+        const confirmBtn = document.getElementById('confirmChargeBtn');
+        const amountInput = document.getElementById('chargeAmount');
+
+        function showModal() { modal.style.display = 'block'; overlay.style.display = 'block'; }
+        function hideModal() { modal.style.display = 'none'; overlay.style.display = 'none'; }
+
+        chargeBtn.onclick = showModal;
+        closeBtn.onclick = hideModal;
+        overlay.onclick = hideModal;
+
+        confirmBtn.onclick = async () => {
+            const amount = parseInt(amountInput.value);
+            if (!amount || amount < 1) {
+                showToast("1원 이상 입력하세요.");
+                return;
+            }
+            try {
+                const res = await fetch('/api/charge-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: amount })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n계좌로 입금 후 메모에 주문번호를 입력하세요.`);
+                    hideModal();
+                    amountInput.value = '';
+                } else {
+                    showToast(data.error || "오류 발생");
+                }
+            } catch(e) {
+                showToast("네트워크 오류");
+            }
         };
     }
 </script>
