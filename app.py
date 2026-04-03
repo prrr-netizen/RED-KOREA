@@ -37,6 +37,10 @@ logging.getLogger("discord.gateway").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change")
+app.config['SESSION_COOKIE_SECURE'] = False  # Render에서 HTTPS 사용 시 True로 변경
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "dev-pass-change")
 
@@ -93,7 +97,7 @@ def ensure_user_id() -> Optional[int]:
         return None
     user_id = to_int(raw_id)
     if user_id is not None:
-        session["user_id"] = user_id  # 타입 정규화
+        session["user_id"] = user_id
     return user_id
 
 # ==============================
@@ -516,7 +520,7 @@ def run_bot():
         print(f"봇 실행 오류: {e}")
 
 # ==============================
-# Flask 웹 라우트 (타입 안전 + 디버깅)
+# Flask 웹 라우트 (수정됨)
 # ==============================
 @app.before_request
 def normalize_session():
@@ -527,6 +531,9 @@ def normalize_session():
             session["user_id"] = user_id
         else:
             session.pop("user_id", None)
+    
+    # 디버그 출력
+    print(f"[BEFORE_REQ] Path: {request.path}, Session user_id: {session.get('user_id')}")
 
 @app.route("/api/stock")
 def api_stock():
@@ -540,88 +547,88 @@ def api_points():
     user_id = ensure_user_id()
     if not user_id:
         return jsonify({"points": 0, "error": "not logged in"})
-    return jsonify({"points": get_points(user_id)})
+    points = get_points(user_id)
+    print(f"[POINTS] user_id={user_id}, points={points}")
+    return jsonify({"points": points})
 
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
-    """안전한 구매 API - 디버깅 로그 포함"""
+    """수정된 구매 API - 모든 에러 처리 완료"""
     
-    # ===== 디버깅 로그 시작 =====
-    print("\n" + "="*60)
-    print("[DEBUG] /api/buy 호출됨")
-    print(f"[DEBUG] 시간: {datetime.now()}")
-    print(f"[DEBUG] 세션 전체: {dict(session)}")
-    print(f"[DEBUG] 세션 user_id: {session.get('user_id')!r} (타입: {type(session.get('user_id'))})")
-    print(f"[DEBUG] 요청 메소드: {request.method}")
-    print(f"[DEBUG] 요청 헤더 Content-Type: {request.headers.get('Content-Type')}")
-    print(f"[DEBUG] 요청 raw 데이터: {request.get_data(as_text=True)}")
-    # ===== 디버깅 로그 끝 =====
+    print(f"\n[BUY] ===== 구매 요청 수신 =====")
+    print(f"[BUY] 세션 user_id: {session.get('user_id')!r}")
     
+    # 1. 로그인 확인
     user_id = ensure_user_id()
     if not user_id:
-        print("[DEBUG] ❌ user_id 없음 - 로그인 필요")
+        print(f"[BUY] ❌ 로그인되지 않음")
         return jsonify({"ok": False, "error": "로그인이 필요합니다. 다시 로그인해주세요."}), 401
     
-    print(f"[DEBUG] ✅ 변환된 user_id: {user_id} (타입: {type(user_id)})")
+    print(f"[BUY] ✅ user_id: {user_id}")
     
-    # 요청 데이터 파싱
+    # 2. Content-Type 확인
+    if not request.is_json:
+        print(f"[BUY] ❌ Content-Type 오류: {request.headers.get('Content-Type')}")
+        return jsonify({"ok": False, "error": "Content-Type이 application/json이 아닙니다."}), 400
+    
+    # 3. JSON 파싱
     try:
         data = request.get_json()
-        print(f"[DEBUG] 파싱된 JSON 데이터: {data}")
-        if not data:
-            print("[DEBUG] ❌ 데이터 없음")
-            return jsonify({"ok": False, "error": "잘못된 요청 형식입니다."}), 400
+        print(f"[BUY] 요청 데이터: {data}")
     except Exception as e:
-        print(f"[DEBUG] ❌ JSON 파싱 오류: {e}")
+        print(f"[BUY] ❌ JSON 파싱 오류: {e}")
         return jsonify({"ok": False, "error": f"JSON 파싱 오류: {str(e)}"}), 400
     
-    product_id = data.get("product_id")
-    print(f"[DEBUG] product_id: {product_id}")
+    if not data:
+        print(f"[BUY] ❌ 빈 데이터")
+        return jsonify({"ok": False, "error": "요청 데이터가 없습니다."}), 400
     
+    # 4. product_id 확인
+    product_id = data.get("product_id")
     if not product_id:
-        print("[DEBUG] ❌ product_id 없음")
+        print(f"[BUY] ❌ product_id 없음")
         return jsonify({"ok": False, "error": "상품 ID가 필요합니다."}), 400
     
-    # 상품 찾기
+    print(f"[BUY] product_id: {product_id}")
+    
+    # 5. 상품 존재 확인
     product = next((p for p in PRODUCTS if p["id"] == product_id), None)
     if not product:
-        print(f"[DEBUG] ❌ 존재하지 않는 상품: {product_id}")
+        print(f"[BUY] ❌ 존재하지 않는 상품")
         return jsonify({"ok": False, "error": f"존재하지 않는 상품입니다: {product_id}"}), 400
     
     price = product["price"]
     product_name = product["name"]
-    print(f"[DEBUG] 상품명: {product_name}, 가격: {price}")
+    print(f"[BUY] 상품: {product_name}, 가격: {price}")
     
-    # 현재 포인트 확인
+    # 6. 포인트 확인 및 차감
     current_points = get_points(user_id)
-    print(f"[DEBUG] 현재 포인트: {current_points}")
+    print(f"[BUY] 현재 포인트: {current_points}")
     
-    # 포인트 차감
     new_balance = remove_points(user_id, price)
     if new_balance is None:
-        print(f"[DEBUG] ❌ 포인트 부족 (필요: {price}, 보유: {current_points})")
+        print(f"[BUY] ❌ 포인트 부족")
         return jsonify({
             "ok": False, 
             "error": f"포인트 부족 (필요: {price:,}P / 보유: {current_points:,}P)"
         }), 400
     
-    print(f"[DEBUG] ✅ 포인트 차감됨, 새 잔액: {new_balance}")
+    print(f"[BUY] ✅ 포인트 차감됨, 새 잔액: {new_balance}")
     
-    # 코드 발급
+    # 7. 코드 발급
     code = get_unused_code(product_id)
     if code is None:
-        # 롤백: 차감한 포인트 복구
-        add_points(user_id, price)
-        print(f"[DEBUG] ❌ 재고 부족 - 롤백됨")
+        add_points(user_id, price)  # 롤백
+        print(f"[BUY] ❌ 재고 부족, 롤백됨")
         return jsonify({"ok": False, "error": f"재고 부족 - {product_name}"}), 400
     
-    print(f"[DEBUG] ✅ 코드 발급됨: {code}")
+    print(f"[BUY] ✅ 코드 발급: {code}")
     
-    # 주문 저장
+    # 8. 주문 저장
     insert_order(user_id, product_name, price, code)
-    print(f"[DEBUG] ✅ 주문 저장됨")
+    print(f"[BUY] ✅ 주문 저장됨")
     
-    # 웹훅 알림 (비동기, 에러 무시)
+    # 9. 웹훅 알림 (선택사항, 실패해도 구매는 성공)
     try:
         admin_embed = discord.Embed(
             title="✅ 구매 발생 (관리자용)", 
@@ -632,24 +639,12 @@ def api_buy():
                        f"**남은 포인트:** {new_balance:,}P", 
             color=0x2ecc71
         )
-        requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
-        print("[DEBUG] ✅ 관리자 웹훅 전송됨")
+        requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=2)
     except Exception as e:
-        print(f"[DEBUG] ⚠️ 관리자 웹훅 오류: {e}")
+        print(f"[BUY] ⚠️ 웹훅 오류 (무시): {e}")
     
-    try:
-        buy_embed = discord.Embed(
-            title="🛒 구매 발생", 
-            description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", 
-            color=0x2ecc71
-        )
-        requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
-        print("[DEBUG] ✅ 구매로그 웹훅 전송됨")
-    except Exception as e:
-        print(f"[DEBUG] ⚠️ 구매로그 웹훅 오류: {e}")
-    
-    print(f"[DEBUG] ✅ 구매 완료 응답 반환")
-    print("="*60 + "\n")
+    print(f"[BUY] ✅ 구매 성공! 응답 반환")
+    print(f"[BUY] ============================\n")
     
     return jsonify({
         "ok": True, 
@@ -695,7 +690,7 @@ def api_charge_request():
     return jsonify({"ok": True, "order_number": order_num})
 
 # ==============================
-# HTML 템플릿
+# HTML 템플릿 (축약됨 - 동일)
 # ==============================
 index_html = """
 <!DOCTYPE html>
@@ -878,7 +873,7 @@ index_html = """
     }
 
     async function buyProduct(productId, productName, price) {
-        console.log('[DEBUG] 구매 요청:', productId, productName, price);
+        console.log('[DEBUG] 구매 요청:', productId);
         try {
             const res = await fetch('/api/buy', {
                 method: 'POST',
@@ -896,7 +891,7 @@ index_html = """
                 showToast(data.error || "구매 실패", true);
             }
         } catch(e) {
-            console.error('[DEBUG] 네트워크 오류:', e);
+            console.error('[DEBUG] 오류:', e);
             showToast("네트워크 오류: " + e.message, true);
         }
     }
@@ -1234,6 +1229,7 @@ def auth_callback():
         session["user_id"] = int(user["id"])
         session["username"] = f"{user['username']}#{user['discriminator']}"
         session["avatar"] = f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png" if user["avatar"] else None
+        print(f"[AUTH] 로그인 성공: user_id={session['user_id']}")
     return redirect(url_for("index"))
 
 @app.route("/auth/logout")
