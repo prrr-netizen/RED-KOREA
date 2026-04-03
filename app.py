@@ -39,14 +39,14 @@ DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "1478639969009406004")
 DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "여기에_시크릿키")
 DISCORD_REDIRECT_URI = os.environ.get("DISCORD_REDIRECT_URI", "https://api.redkorea.store/auth/callback")
 
-# 웹훅 분리
-ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1489485738168025279/nwe2k1dQl7f6lPpS9jCJJpHUXFD3d-dtcMCvS_NiDPXPsDtPW1hljJ1xFOdxPzf3QCxz"   # 관리자 채널
+# 🔥 웹훅 URL (사용자님 제공 기준으로 수정)
+ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1489485738168025279/nwe2k1dQl7f6lPpS9jCJJpHUXFD3d-dtcMCvS_NiDPXPsDtPW1hljJ1xFOdxPzf3QCxz"  # 관리자 채널
 BUY_LOG_WEBHOOK_URL = "https://discord.com/api/webhooks/1488231305396224041/Fa_z7Wihwf9-k79aGNcvaLNj3emxWYxlFoD6xVGkgLxzZKig3Uc7MQpL8Nk93d4Pyfat"   # 구매 로그 채널
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "shop.db")
 
 # ==============================
-# DB 초기화 (자동충전 관련 테이블 제거)
+# DB 초기화
 # ==============================
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -68,6 +68,16 @@ def init_db():
             product_id TEXT NOT NULL,
             code TEXT NOT NULL UNIQUE,
             used INTEGER DEFAULT 0
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS charge_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_number TEXT UNIQUE NOT NULL,
+            user_id INTEGER NOT NULL,
+            amount INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            processed INTEGER DEFAULT 0
         )
     """)
     cur.execute("PRAGMA table_info(orders)")
@@ -196,20 +206,34 @@ def delete_code(code: str) -> bool:
     return deleted
 
 # ==============================
-# 충전 요청 (주문번호 발급은 더 이상 필요 없음)
+# 충전 요청 (주문번호 발급)
 # ==============================
 def create_charge_request(user_id: int, amount: int) -> str:
-    """주문번호 생성 (단순 식별용, 자동충전은 없음)"""
-    return ''.join(random.choices(string.digits, k=6))
+    while True:
+        order_num = ''.join(random.choices(string.digits, k=6))
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM charge_requests WHERE order_number = ?", (order_num,))
+        if not cur.fetchone():
+            conn.close()
+            break
+        conn.close()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("INSERT INTO charge_requests (order_number, user_id, amount, processed) VALUES (?, ?, ?, 0)",
+                (order_num, user_id, amount))
+    conn.commit()
+    conn.close()
+    return order_num
 
 # ==============================
-# 디스코드 봇 설정
+# 디스코드 봇
 # ==============================
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
 
-ADMIN_CHANNEL_ID = 1488221287531679915
+ADMIN_CHANNEL_ID = 1488221287531679915   # 실제 채널 ID (웹훅과 별개)
 BUY_LOG_CHANNEL_ID = 1488221128286802143
 REVIEW_CHANNEL_ID = 1487603259773419641
 STATUS_MESSAGES = ["상담 환영", "문의는 티켓"]
@@ -230,14 +254,6 @@ async def is_buyer(member: discord.Member) -> bool:
     role = discord.utils.get(guild.roles, name=BUYER_ROLE_NAME)
     return role is not None and role in member.roles
 
-async def send_webhook(webhook_url: str, embed: discord.Embed):
-    """웹훅으로 임베드 전송"""
-    try:
-        data = {"embeds": [embed.to_dict()]} if embed else {"content": embed.description if embed else ""}
-        requests.post(webhook_url, json=data, timeout=3)
-    except Exception as e:
-        print(f"[WEBHOOK_ERROR] {e}")
-
 async def safe_dm_embed(user: discord.abc.User, embed: discord.Embed) -> None:
     try:
         dm = await user.create_dm()
@@ -245,9 +261,6 @@ async def safe_dm_embed(user: discord.abc.User, embed: discord.Embed) -> None:
     except Exception as e:
         print(f"[DM_EMBED_ERROR] user={user.id} | {e}")
 
-# ==============================
-# 구매 후기 뷰
-# ==============================
 class AfterPurchaseView(discord.ui.View):
     def __init__(self, product_name: str):
         super().__init__(timeout=300)
@@ -268,9 +281,6 @@ class AfterPurchaseView(discord.ui.View):
         modal.on_submit = on_submit
         await interaction.response.send_modal(modal)
 
-# ==============================
-# 구매 선택 뷰
-# ==============================
 class ProductSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
@@ -309,24 +319,25 @@ class ProductSelect(discord.ui.Select):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         insert_order(user.id, product_name, price)
-
-        # 관리자 채널에 상세 로그 (웹훅)
-        admin_embed = discord.Embed(title="✅ 구매 완료", description=f"**유저:** {user.mention} (`{user.id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
-        await send_webhook(ADMIN_WEBHOOK_URL, admin_embed)
-
-        # 구매 로그 채널에 익명 로그 (웹훅)
-        purchase_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
-        await send_webhook(BUY_LOG_WEBHOOK_URL, purchase_embed)
-
-        # DM 전송
+        # 관리자 채널 웹훅 (상세 로그)
+        admin_embed = discord.Embed(title="✅ 구매 발생 (관리자용)", description=f"**유저:** {user.mention} (`{user.id}`)\n**상품명:** `{product_name}`\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
+        try:
+            requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [admin_embed.to_dict()]}, timeout=3)
+        except:
+            pass
+        # 구매 로그 채널 웹훅 (익명)
+        buy_embed = discord.Embed(title="🛒 구매 발생", description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.", color=0x2ecc71)
+        try:
+            requests.post(BUY_LOG_WEBHOOK_URL, json={"embeds": [buy_embed.to_dict()]}, timeout=3)
+        except:
+            pass
+        # DM 발송
         dm_embed = discord.Embed(title="✅ 구매 완료", description=f"**상품명:** {product_name}\n**발급 코드:** `{code}`\n**차감 포인트:** {price:,}P\n**남은 포인트:** {new_balance:,}P", color=0x2ecc71)
         dm_embed.set_footer(text="코드는 외부에 유출되지 않도록 주의해 주세요.")
         await safe_dm_embed(user, dm_embed)
-
         success_embed = discord.Embed(title="✅ 구매 완료", description=f"**{product_name}**\n차감 포인트: {price:,}P\n남은 포인트: {new_balance:,}P", color=0x2ecc71)
         view = AfterPurchaseView(product_name)
         await interaction.response.send_message(embed=success_embed, view=view, ephemeral=True)
-
         guild = interaction.guild
         if guild:
             role = discord.utils.get(guild.roles, name=BUYER_ROLE_NAME)
@@ -336,9 +347,6 @@ class ProductSelect(discord.ui.Select):
                 except Exception as e:
                     print(f"[ROLE_ERROR] {e}")
 
-# ==============================
-# 일반 패널 (비구매자)
-# ==============================
 class RedVendingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -373,9 +381,6 @@ class RedVendingView(discord.ui.View):
         embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 아래 메뉴에서 선택해 주세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-# ==============================
-# 구매자 전용 패널 (수동 충전 안내)
-# ==============================
 class BuyerRedVendingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -387,9 +392,9 @@ class BuyerRedVendingView(discord.ui.View):
         embed = discord.Embed(
             title="💳 충전 안내 (구매자 전용)",
             description=(
-                f"**아래 계좌로 입금 후, 관리자에게 DM 또는 티켓으로 알려주세요.**\n\n"
+                f"**아래 계좌로 입금 후, 관리자에게 입금 사실을 알려주세요.**\n\n"
                 f"🏦 은행: 농협은행\n💳 계좌: `3521617659683`\n👤 예금주: 김대훈\n\n"
-                f"📢 입금 확인 후 관리자가 포인트를 지급합니다.\n\n"
+                f"📢 입금 완료 후 관리자에게 DM 또는 채팅으로 알려주시면 포인트를 지급해 드립니다.\n\n"
                 f"📊 현재 포인트: **{points:,}P**"
             ),
             color=0x27ae60,
@@ -421,29 +426,6 @@ class BuyerRedVendingView(discord.ui.View):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # ==============================
-# 충전 요청 명령어 (웹훅 알림)
-# ==============================
-@bot.command(name="충전요청")
-async def charge_request_cmd(ctx: commands.Context, amount: int):
-    """디스코드에서 충전 요청 (관리자에게 웹훅 알림)"""
-    if amount < 1:
-        await ctx.reply("❌ 1원 이상 입력해주세요.", delete_after=5)
-        return
-    user = ctx.author
-    order_num = ''.join(random.choices(string.digits, k=6))
-    content = (
-        f"💳 **충전 요청**\n"
-        f"유저: {user.mention} (`{user.id}`)\n"
-        f"금액: {amount:,}원\n"
-        f"주문번호: `{order_num}`\n"
-        f"계좌로 입금 후 관리자에게 알려주세요.\n"
-        f"계좌: 3521617659683 (농협, 김대훈)"
-    )
-    embed = discord.Embed(title="💳 충전 요청", description=content, color=0x3498db)
-    await send_webhook(ADMIN_WEBHOOK_URL, embed)
-    await ctx.reply(f"✅ 충전 요청이 접수되었습니다. 주문번호: {order_num}\n관리자가 확인 후 처리합니다.")
-
-# ==============================
 # 관리자 충전 명령어
 # ==============================
 @bot.command(name="충전")
@@ -457,9 +439,6 @@ async def charge_cmd(ctx: commands.Context, member: discord.Member, amount: int)
     dm_embed = discord.Embed(title="💰 충전 완료", description=f"**충전 포인트:** {amount:,}P\n**현재 포인트:** {new_balance:,}P", color=0x3498db)
     dm_embed.set_footer(text="문의사항은 관리자에게 문의하세요.")
     await safe_dm_embed(member, dm_embed)
-    # 관리자 채널에 로그
-    admin_embed = discord.Embed(title="💰 관리자 충전", description=f"{ctx.author.mention} 님이 {member.mention} 님에게 {amount:,}P 충전", color=0x00ff00)
-    await send_webhook(ADMIN_WEBHOOK_URL, admin_embed)
 
 @charge_cmd.error
 async def charge_error(ctx: commands.Context, error):
@@ -468,6 +447,9 @@ async def charge_error(ctx: commands.Context, error):
     else:
         await ctx.reply("❌ 사용법: `.충전 @유저 금액`", delete_after=5)
 
+# ==============================
+# 패널 생성 명령어
+# ==============================
 @bot.command(name="레드코리아패널")
 @commands.has_permissions(administrator=True)
 async def create_red_panel(ctx: commands.Context):
@@ -560,7 +542,7 @@ def run_bot():
         print(f"봇 실행 오류: {e}")
 
 # ==============================
-# Flask 웹 라우트 (OAuth2 + HTML)
+# Flask 웹 라우트 (충전 요청)
 # ==============================
 def get_discord_user(access_token):
     resp = requests.get(
@@ -621,23 +603,24 @@ def api_charge_request():
     amount = data.get("amount")
     if not amount or amount < 1:
         return jsonify({"ok": False, "error": "충전 금액을 입력해주세요"}), 400
-    order_num = ''.join(random.choices(string.digits, k=6))
+    order_num = create_charge_request(user_id, amount)
+    # 🔥 관리자 채널 웹훅으로만 전송 (구매 로그 채널에는 안 감)
     content = (
-        f"💳 **충전 요청 (웹)**\n"
-        f"유저 ID: <@{user_id}>\n"
+        f"💳 **충전 요청 접수**\n"
+        f"유저: <@{user_id}>\n"
         f"금액: {amount:,}원\n"
         f"주문번호: `{order_num}`\n"
-        f"계좌로 입금 후 관리자에게 알려주세요.\n계좌: 3521617659683 (농협, 김대훈)"
+        f"계좌: 3521617659683 (농협, 김대훈)\n"
+        f"입금 확인 후 `.충전 <@{user_id}> {amount}` 명령어로 포인트를 지급하세요."
     )
-    embed = discord.Embed(title="💳 충전 요청", description=content, color=0x3498db)
     try:
-        requests.post(ADMIN_WEBHOOK_URL, json={"embeds": [embed.to_dict()]}, timeout=3)
-    except:
-        pass
+        requests.post(ADMIN_WEBHOOK_URL, json={"content": content}, timeout=3)
+    except Exception as e:
+        print(f"[WEBHOOK_ERROR] {e}")
     return jsonify({"ok": True, "order_number": order_num})
 
 # ==============================
-# 웹 HTML (중앙 정렬, 충전 안내)
+# 웹 디자인 (중앙 정렬)
 # ==============================
 index_html = """
 <!DOCTYPE html>
@@ -650,25 +633,64 @@ index_html = """
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { background: radial-gradient(circle at 10% 20%, #0f0c1f, #02010a); font-family: 'Inter', sans-serif; color: #eef2ff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
-        .glass-card { background: rgba(15,23,42,0.65); backdrop-filter: blur(16px); border-radius: 2rem; border: 1px solid rgba(96,165,250,0.25); box-shadow: 0 25px 45px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.02); max-width: 540px; width: 100%; padding: 2rem 1.8rem; transition: transform 0.2s; }
+        body {
+            background: radial-gradient(circle at 10% 20%, #0f0c1f, #02010a);
+            font-family: 'Inter', sans-serif;
+            color: #eef2ff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+        .glass-card {
+            background: rgba(15,23,42,0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 2rem;
+            border: 1px solid rgba(96,165,250,0.25);
+            box-shadow: 0 25px 45px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.02);
+            max-width: 540px;
+            width: 100%;
+            padding: 2rem 1.8rem;
+            transition: transform 0.2s;
+        }
         .glass-card:hover { transform: translateY(-2px); border-color: rgba(96,165,250,0.5); }
-        .logo { font-size: 2rem; font-weight: 800; background: linear-gradient(135deg,#fff,#a78bfa,#ff4b6e); -webkit-background-clip:text; background-clip:text; color:transparent; text-align:center; margin-bottom:1.5rem; }
-        .user-section { background: rgba(0,0,0,0.35); border-radius: 2rem; padding: 0.7rem 1.2rem; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.8rem; border:1px solid rgba(96,165,250,0.2); }
+        .logo {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff, #a78bfa, #ff4b6e);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .user-section {
+            background: rgba(0,0,0,0.35);
+            border-radius: 2rem;
+            padding: 0.7rem 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.8rem;
+            border: 1px solid rgba(96,165,250,0.2);
+        }
         .user-info { display: flex; align-items: center; gap: 0.8rem; }
         .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #60a5fa; object-fit: cover; }
         .username { font-weight: 600; font-size: 0.9rem; }
         .points-badge { background: rgba(255,180,71,0.15); padding: 0.35rem 0.9rem; border-radius: 40px; font-size: 0.8rem; font-weight: 600; color: #ffb347; }
         .points-badge i { margin-right: 0.3rem; }
-        .login-btn { background: linear-gradient(135deg,#5865f2,#4752c4); color: white; text-decoration: none; padding: 0.5rem 1.2rem; border-radius: 40px; font-weight: 600; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .login-btn { background: linear-gradient(135deg,#5865f2,#4752c4); color: white; text-decoration: none; padding: 0.5rem 1.2rem; border-radius: 40px; font-weight: 600; transition: 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
         .login-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(88,101,242,0.4); }
         .account-box { background: linear-gradient(135deg, rgba(37,99,235,0.15), rgba(147,51,234,0.1)); border-radius: 1.5rem; padding: 1.5rem; margin: 1.5rem 0; text-align: center; border: 1px solid rgba(96,165,250,0.3); }
         .account-box h2 { font-size: 1.2rem; margin-bottom: 0.8rem; }
-        .account-number { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg,#fff,#ffb347); -webkit-background-clip:text; background-clip:text; color:transparent; letter-spacing: 2px; margin: 0.5rem 0; }
-        .charge-btn { background: linear-gradient(135deg,#ff4b6e,#ff6b4a); border: none; padding: 0.7rem 1.8rem; border-radius: 40px; font-weight: 700; color: white; cursor: pointer; margin-top: 1rem; transition: all 0.2s; font-size: 0.9rem; }
+        .account-number { font-size: 1.6rem; font-weight: 800; background: linear-gradient(135deg,#fff,#ffb347); -webkit-background-clip: text; background-clip: text; color: transparent; letter-spacing: 2px; margin: 0.5rem 0; }
+        .charge-btn { background: linear-gradient(135deg,#ff4b6e,#ff6b4a); border: none; padding: 0.7rem 1.8rem; border-radius: 40px; font-weight: 700; color: white; cursor: pointer; margin-top: 1rem; transition: 0.2s; }
         .charge-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(255,75,110,0.4); }
         .footer { text-align: center; margin-top: 2rem; color: #6c6c7a; font-size: 0.7rem; }
-        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e1a2f; backdrop-filter: blur(20px); padding: 1.8rem; border-radius: 1.5rem; z-index: 1000; width: 300px; text-align: center; border: 1px solid rgba(255,75,110,0.5); box-shadow: 0 20px 35px rgba(0,0,0,0.5); }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #1e1a2f; backdrop-filter: blur(20px); padding: 1.8rem; border-radius: 1.5rem; z-index: 1000; width: 300px; text-align: center; border: 1px solid rgba(255,75,110,0.5); box-shadow: 0 20px 35px rgba(0,0,0,0.5); }
         .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 999; }
         input { width: 100%; padding: 0.6rem; margin: 1rem 0; border-radius: 12px; border: 1px solid #4b5563; background: #0f172a; color: white; font-size: 1rem; text-align: center; }
         .modal button { background: #ff4b6e; border: none; padding: 0.5rem 1rem; border-radius: 30px; color: white; cursor: pointer; margin: 0 0.5rem; font-weight: 600; transition: 0.1s; }
@@ -685,9 +707,7 @@ index_html = """
             <img class="avatar" src="{{ avatar }}" alt="avatar">
             <span class="username">{{ username }}</span>
         </div>
-        <div class="points-badge">
-            <i class="fas fa-coins"></i> <span id="points">0</span> P
-        </div>
+        <div class="points-badge"><i class="fas fa-coins"></i> <span id="points">0</span> P</div>
         <a href="/auth/logout" style="color:#ff6b4a; text-decoration:none;"><i class="fas fa-sign-out-alt"></i></a>
         {% else %}
         <a href="/auth/login" class="login-btn"><i class="fab fa-discord"></i> 디스코드 로그인</a>
@@ -696,7 +716,7 @@ index_html = """
     {% if user_id %}
     <div class="account-box">
         <h2><i class="fas fa-university"></i> 입금 계좌 정보</h2>
-        <p>아래 계좌로 입금 후, <strong>관리자에게 알려주세요</strong> (디스코드 티켓 또는 DM).</p>
+        <p>아래 계좌로 입금 후, 관리자에게 입금 사실을 알려주세요.</p>
         <div class="account-number">3521617659683</div>
         <p>예금주: 김대훈 | 농협은행</p>
         <button id="chargeBtn" class="charge-btn"><i class="fas fa-bolt"></i> 충전 요청</button>
