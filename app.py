@@ -424,25 +424,9 @@ async def safe_dm_embed(user: discord.abc.User, embed: discord.Embed) -> None:
     except Exception as e:
         print(f"[DM_EMBED_ERROR] user={user.id} | {e}")
 
-class DepositConfirmView(discord.ui.View):
-    def __init__(self, user_id: int):
-        super().__init__(timeout=None)
-        self.user_id = user_id
-
-    @discord.ui.button(label="✅ 입금 완료", style=discord.ButtonStyle.success, custom_id="deposit_confirm")
-    async def deposit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ 이 버튼은 충전을 요청한 본인만 사용할 수 있습니다.", ephemeral=True)
-            return
-        await interaction.response.send_message(
-            embed=discord.Embed(title="⏳ 확인 중", description="확인 중입니다... 잠시만 기다리시면 충전이 완료됩니다.", color=0xf1c40f),
-            ephemeral=True
-        )
-        admin_ch = bot.get_channel(ADMIN_CHANNEL_ID)
-        if admin_ch:
-            embed = discord.Embed(title="💳 입금 완료 승인", description=f"{interaction.user.mention} 님이 입금 완료\n확인 후 `.충전 {interaction.user.mention} 금액` 포인트 지급", color=0x3498db)
-            await admin_ch.send(embed=embed)
-
+# ==============================
+# 구매 후기 뷰 (변경 없음)
+# ==============================
 class AfterPurchaseView(discord.ui.View):
     def __init__(self, product_name: str):
         super().__init__(timeout=300)
@@ -463,6 +447,9 @@ class AfterPurchaseView(discord.ui.View):
         modal.on_submit = on_submit
         await interaction.response.send_modal(modal)
 
+# ==============================
+# 구매 선택 뷰 (변경 없음)
+# ==============================
 class ProductSelectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
@@ -519,6 +506,9 @@ class ProductSelect(discord.ui.Select):
                 except Exception as e:
                     print(f"[ROLE_ERROR] {e}")
 
+# ==============================
+# 일반 패널 (비구매자용)
+# ==============================
 class RedVendingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -553,6 +543,9 @@ class RedVendingView(discord.ui.View):
         embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 아래 메뉴에서 선택해 주세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+# ==============================
+# 구매자 전용 패널 (입금 완료 버튼 제거, 자동충전 안내)
+# ==============================
 class BuyerRedVendingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -561,13 +554,18 @@ class BuyerRedVendingView(discord.ui.View):
     async def charge_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         points = get_points(user.id)
-        embed = discord.Embed(title="💳 충전 안내 (구매자 전용)", description=(
-            f"**아래 계좌로 입금 후, '입금 완료' 버튼을 눌러 주세요.**\n\n"
-            f"🏦 은행: 농협은행\n💳 계좌: `3521617659683`\n👤 예금주: 김대훈\n\n"
-            f"📊 현재 포인트: **{points:,}P**"
-        ), color=0x27ae60)
-        view = DepositConfirmView(user.id)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        embed = discord.Embed(
+            title="💳 충전 안내 (구매자 전용)",
+            description=(
+                f"**아래 계좌로 입금 시, 입금자명 또는 메모에 주문번호를 정확히 입력해 주세요.**\n\n"
+                f"🏦 은행: 농협은행\n💳 계좌: `3521617659683`\n👤 예금주: 김대훈\n\n"
+                f"💡 주문번호는 **웹사이트 또는 `.충전요청` 명령어**로 발급받을 수 있습니다.\n"
+                f"입금 후 **자동으로 포인트가 충전**됩니다.\n\n"
+                f"📊 현재 포인트: **{points:,}P**"
+            ),
+            color=0x27ae60,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="📊 정보", style=discord.ButtonStyle.secondary, custom_id="buyer_red_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -593,6 +591,44 @@ class BuyerRedVendingView(discord.ui.View):
         embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 아래 메뉴에서 선택해 주세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+# ==============================
+# 디스코드 충전 요청 명령어 (웹사이트와 동일)
+# ==============================
+@bot.command(name="충전요청")
+async def charge_request_cmd(ctx: commands.Context, amount: int):
+    """디스코드에서 충전 요청 (주문번호 발급)"""
+    if amount < 1:
+        await ctx.reply("❌ 1원 이상 입력해주세요.", delete_after=5)
+        return
+    user_id = ctx.author.id
+    order_num = create_charge_request(user_id, amount)
+    # 관리자 채널로 알림
+    content = (
+        f"💳 **충전 요청 접수 (디스코드)**\n"
+        f"유저: {ctx.author.mention} (`{user_id}`)\n"
+        f"금액: {amount:,}원\n"
+        f"주문번호: `{order_num}`\n"
+        f"계좌로 입금 시 주문번호를 입금자명 또는 메모에 입력하세요."
+    )
+    try:
+        requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
+    except:
+        pass
+    embed = discord.Embed(
+        title="💳 충전 요청 접수",
+        description=(
+            f"주문번호: **{order_num}**\n\n"
+            f"아래 계좌로 입금 후, **입금자명 또는 메모에 주문번호**를 정확히 입력해 주세요.\n\n"
+            f"🏦 농협은행\n💳 `3521617659683`\n👤 김대훈\n\n"
+            f"✅ 입금 후 자동으로 포인트가 충전됩니다."
+        ),
+        color=0x27ae60,
+    )
+    await ctx.reply(embed=embed)
+
+# ==============================
+# 기존 관리자 충전 명령어
+# ==============================
 @bot.command(name="충전")
 @commands.has_permissions(administrator=True)
 async def charge_cmd(ctx: commands.Context, member: discord.Member, amount: int):
@@ -771,7 +807,7 @@ def api_charge_request():
         f"유저 ID: <@{user_id}>\n"
         f"금액: {amount:,}원\n"
         f"주문번호: `{order_num}`\n"
-        f"계좌로 입금 후 메모에 주문번호를 입력하세요."
+        f"계좌로 입금 시 주문번호를 입금자명 또는 메모에 입력하세요."
     )
     try:
         requests.post(WEBHOOK_URL, json={"content": content}, timeout=3)
@@ -780,7 +816,7 @@ def api_charge_request():
     return jsonify({"ok": True, "order_number": order_num})
 
 # ==============================
-# 최신 디자인 HTML (중앙 정렬, 글래스 모피즘)
+# 웹 디자인 (로그인 버튼 중앙 정렬 + 충전 안내 문구 수정)
 # ==============================
 index_html = """
 <!DOCTYPE html>
@@ -844,7 +880,7 @@ index_html = """
             padding: 0.7rem 1.2rem;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
             flex-wrap: wrap;
             gap: 1rem;
             margin-bottom: 1.8rem;
@@ -1040,7 +1076,7 @@ index_html = """
     {% if user_id %}
     <div class="account-box">
         <h2><i class="fas fa-university"></i> 입금 계좌 정보</h2>
-        <p>아래 계좌로 입금 후, 메모에 주문번호를 입력하세요.</p>
+        <p>아래 계좌로 입금 시, <strong>입금자명 또는 메모에 주문번호를 정확히 입력</strong>해 주세요.</p>
         <div class="account-number">3521617659683</div>
         <p>예금주: 김대훈 | 농협은행</p>
         <button id="chargeBtn" class="charge-btn"><i class="fas fa-bolt"></i> 충전 요청</button>
@@ -1128,7 +1164,7 @@ index_html = """
                 });
                 const data = await res.json();
                 if (data.ok) {
-                    alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n계좌로 입금 후 메모에 주문번호를 입력하세요.`);
+                    alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n계좌로 입금 시 주문번호를 입금자명 또는 메모에 입력하세요.`);
                     hideModal();
                     amountInput.value = '';
                 } else {
