@@ -363,32 +363,51 @@ class RedVendingView(discord.ui.View):
     @discord.ui.button(label="💰 충전", style=discord.ButtonStyle.success, custom_id="red_charge")
     async def charge_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         TICKET_CHANNEL_ID = 1487602282257453238
-        embed = discord.Embed(title="🔒 구매자 전용 서비스", description=f"회원님은 현재 구매 내역이 없습니다.\n충전을 원하시면 먼저 구매 후 이용 가능합니다.\n문의: <#{TICKET_CHANNEL_ID}> (티켓 채널)", color=0xe74c3c)
+        embed = discord.Embed(
+            title="🔒 구매자 전용 서비스",
+            description=(
+                f"회원님은 현재 구매 내역이 없습니다.\n"
+                f"충전을 원하시면 먼저 구매 후 이용 가능합니다.\n"
+                f"문의: <#{TICKET_CHANNEL_ID}> (티켓 채널)"
+            ),
+            color=0xe74c3c,
+        )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="📊 정보", style=discord.ButtonStyle.secondary, custom_id="red_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+
         user = interaction.user
         points = get_points(user.id)
         total_spent = get_user_total_spent(user.id)
         orders = get_user_orders(user.id)
+
         embed = discord.Embed(title="📋 사용자 정보", color=0x3498db)
         embed.add_field(name="디스코드", value=f"{user.mention}", inline=False)
         embed.add_field(name="ID", value=f"`{user.id}`", inline=False)
         embed.add_field(name="💰 현재 포인트", value=f"{points:,}P", inline=False)
         embed.add_field(name="💸 누적 사용 포인트", value=f"{total_spent:,}P", inline=False)
         if orders:
-            order_list = "\n".join([f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders])
+            order_list = "\n".join(
+                [f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders]
+            )
             embed.add_field(name="📦 구매 내역", value=order_list, inline=False)
         else:
             embed.add_field(name="📦 구매 내역", value="아직 구매 내역이 없습니다.", inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="red_buy")
     async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         view = ProductSelectView()
-        embed = discord.Embed(title="📦 상품 선택", description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.", color=0x3498db)
+        embed = discord.Embed(
+            title="📦 상품 선택",
+            description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.",
+            color=0x3498db,
+        )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
 
 class BuyerRedVendingView(discord.ui.View):
     def __init__(self):
@@ -409,29 +428,39 @@ class BuyerRedVendingView(discord.ui.View):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="📊 정보", style=discord.ButtonStyle.secondary, custom_id="red_info")
-async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-    await interaction.response.defer(ephemeral=True)
+    @discord.ui.button(label="📊 정보", style=discord.ButtonStyle.secondary, custom_id="buyer_red_info")
+    async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
 
-    user = interaction.user
-    points = get_points(user.id)
-    total_spent = get_user_total_spent(user.id)
-    orders = get_user_orders(user.id)
+        user = interaction.user
+        points = get_points(user.id)
+        total_spent = get_user_total_spent(user.id)
+        orders = get_user_orders(user.id)
 
-    embed = discord.Embed(title="📋 사용자 정보", color=0x3498db)
-    embed.add_field(name="디스코드", value=f"{user.mention}", inline=False)
-    embed.add_field(name="ID", value=f"`{user.id}`", inline=False)
-    embed.add_field(name="💰 현재 포인트", value=f"{points:,}P", inline=False)
-    embed.add_field(name="💸 누적 사용 포인트", value=f"{total_spent:,}P", inline=False)
-    if orders:
-        order_list = "\n".join(
-            [f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders]
+        embed = discord.Embed(title="📋 사용자 정보", color=0x3498db)
+        embed.add_field(name="디스코드", value=f"{user.mention}", inline=False)
+        embed.add_field(name="ID", value=f"`{user.id}`", inline=False)
+        embed.add_field(name="💰 현재 포인트", value=f"{points:,}P", inline=False)
+        embed.add_field(name="💸 누적 사용 포인트", value=f"{total_spent:,}P", inline=False)
+        if orders:
+            order_list = "\n".join(
+                [f"• `{o['created_at'][:10]}` **{o['product_name']}** - {o['price']:,}P" for o in orders]
+            )
+            embed.add_field(name="📦 구매 내역", value=order_list, inline=False)
+        else:
+            embed.add_field(name="📦 구매 내역", value="아직 구매 내역이 없습니다.", inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="buyer_red_buy")
+    async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = ProductSelectView()
+        embed = discord.Embed(
+            title="📦 상품 선택",
+            description="구매할 상품을 선택하세요.\n재고는 옵션 설명에 표시됩니다.",
+            color=0x3498db,
         )
-        embed.add_field(name="📦 구매 내역", value=order_list, inline=False)
-    else:
-        embed.add_field(name="📦 구매 내역", value="아직 구매 내역이 없습니다.", inline=False)
-
-    await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 # ========== 디스코드 명령어 ==========
 @bot.command(name="충전")
