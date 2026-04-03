@@ -833,7 +833,7 @@ index_html = """
 <div id="modalOverlay" class="overlay"></div>
 <div id="chargeModal" class="modal">
     <h3>충전 금액 입력</h3>
-    <input type="number" id="chargeAmount" placeholder="금액 (원)" min="1000" step="1000">
+    <input type="number" id="chargeAmount" placeholder="금액 (원)" min="1" step="1">
     <div>
         <button id="confirmChargeBtn">요청</button>
         <button id="closeModalBtn">닫기</button>
@@ -859,11 +859,11 @@ index_html = """
         overlay.onclick = () => { modal.style.display = 'none'; overlay.style.display = 'none'; };
         document.getElementById('confirmChargeBtn').onclick = async () => {
             const amount = parseInt(document.getElementById('chargeAmount').value);
-            if (!amount || amount < 1) { alert("이용 해주셔서 감사합니다,"); return; }
+            if (!amount || amount < 1) { alert("1원 이상 입력하세요."); return; }
             const res = await fetch('/api/charge-request', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount}) });
             const data = await res.json();
             if (data.ok) {
-                alert(`충전 요청 접수! 주문번호: ${data.order_number}\n계좌로 입금 후 메모에 주문번호를 입력하세요.`);
+                alert(`충전 요청 접수! 주문번호: ${data.order_number}\\n계좌로 입금 후 메모에 주문번호를 입력하세요.`);
                 modal.style.display = 'none';
                 overlay.style.display = 'none';
             } else alert(data.error);
