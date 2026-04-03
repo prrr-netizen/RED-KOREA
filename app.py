@@ -6,7 +6,6 @@ import string
 import threading
 import asyncio
 from datetime import datetime
-from typing import List, Optional, Union
 
 from flask import (
     Flask,
@@ -35,6 +34,17 @@ DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres.cczcenhgureeamwjtkug:5P5iPdjnEMP7ZKDQ@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require")
 
+# 디스코드 채널 ID
+GUILD_ID = 1487602282257453236
+BUY_LOG_CHANNEL_ID = 1488221128286802143      # 구매로그 채널 (익명)
+REVIEW_CHANNEL_ID = 1487603259773419641      # 후기 채널
+ADMIN_CHANNEL_ID = 1488221287531679915       # 관리자 채널 (상세정보)
+INQUIRY_CHANNEL_ID = 1487602282257453238     # 문의 채널
+
+# 역할 ID (설정 필요)
+NON_BUYER_ROLE_ID = 0
+BUYER_ROLE_ID = 0
+
 # ==============================
 # 데이터베이스
 # ==============================
@@ -44,13 +54,13 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY, points INTEGER DEFAULT 0)")
+    cur.execute("CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY, points INTEGER DEFAULT 0, has_purchased INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, user_id BIGINT, product_name TEXT, price INTEGER, code TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     cur.execute("CREATE TABLE IF NOT EXISTS product_codes (id SERIAL PRIMARY KEY, product_id TEXT NOT NULL, code TEXT NOT NULL UNIQUE, used INTEGER DEFAULT 0)")
     cur.execute("CREATE TABLE IF NOT EXISTS charge_requests (id SERIAL PRIMARY KEY, order_number TEXT UNIQUE NOT NULL, user_id BIGINT NOT NULL, amount INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, processed INTEGER DEFAULT 0)")
     conn.commit()
     conn.close()
-    print("✅ 데이터베이스 초기화 완료")
+    print("✅ DB 초기화 완료")
 
 init_db()
 
@@ -76,20 +86,31 @@ def get_points(user_id):
     conn.close()
     return row["points"] if row else 0
 
+def has_purchased_before(user_id):
+    user_id = to_int(user_id)
+    if not user_id:
+        return False
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT has_purchased FROM users WHERE id = %s", (user_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row["has_purchased"] == 1 if row else False
+
 def add_points(user_id, amount):
     user_id = to_int(user_id)
     if not user_id:
         return 0
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT points FROM users WHERE id = %s", (user_id,))
+    cur.execute("SELECT points, has_purchased FROM users WHERE id = %s", (user_id,))
     row = cur.fetchone()
     if row:
         new_balance = row["points"] + amount
         cur.execute("UPDATE users SET points = %s WHERE id = %s", (new_balance, user_id))
     else:
         new_balance = amount
-        cur.execute("INSERT INTO users (id, points) VALUES (%s, %s)", (user_id, new_balance))
+        cur.execute("INSERT INTO users (id, points, has_purchased) VALUES (%s, %s, 0)", (user_id, new_balance))
     conn.commit()
     conn.close()
     return new_balance
@@ -111,6 +132,16 @@ def remove_points(user_id, amount):
     conn.close()
     return new_balance
 
+def mark_as_purchased(user_id):
+    user_id = to_int(user_id)
+    if not user_id:
+        return
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET has_purchased = 1 WHERE id = %s AND has_purchased = 0", (user_id,))
+    conn.commit()
+    conn.close()
+
 def insert_order(user_id, product_name, price, code):
     user_id = to_int(user_id)
     if not user_id:
@@ -121,6 +152,7 @@ def insert_order(user_id, product_name, price, code):
                 (user_id, product_name, price, code))
     conn.commit()
     conn.close()
+    mark_as_purchased(user_id)
 
 def get_user_orders(user_id, limit=10):
     user_id = to_int(user_id)
@@ -208,14 +240,14 @@ def create_charge_request(user_id, amount):
 # 상품 데이터
 # ==============================
 PRODUCTS = [
-    {"id": "wolf_lite", "name": "🔴 RED-WOLF-LITE", "desc": "라이트 버전으로 부담 없이 경험해보는 패키지", "price": 7000, "img": "https://i.imgur.com/Z3BhZ18.jpeg"},
-    {"id": "wolf", "name": "🔴 RED-WOLF", "desc": "공격적인 운영을 위한 하이레벨 패키지", "price": 13000, "img": "https://i.imgur.com/0UBCMGR.jpeg"},
-    {"id": "kd_dropper", "name": "🔴 RED-kd-dropper", "desc": "집중력과 몰입감을 높여주는 트레이닝 패키지", "price": 7000, "img": "https://i.imgur.com/ApGpo16.jpeg"},
-    {"id": "owo", "name": "🔴 RED-OWO", "desc": "AIMBOT 가까운 뼈 혹은 타겟 지정! 가성비 !!", "price": 7000, "img": "https://i.imgur.com/7W1eg5S.png"},
+    {"id": "wolf_lite", "name": "🔴 RED-WOLF-LITE", "desc": "라이트 버전", "price": 7000, "img": "https://i.imgur.com/Z3BhZ18.jpeg"},
+    {"id": "wolf", "name": "🔴 RED-WOLF", "desc": "하이레벨 패키지", "price": 13000, "img": "https://i.imgur.com/0UBCMGR.jpeg"},
+    {"id": "kd_dropper", "name": "🔴 RED-kd-dropper", "desc": "트레이닝 패키지", "price": 7000, "img": "https://i.imgur.com/ApGpo16.jpeg"},
+    {"id": "owo", "name": "🔴 RED-OWO", "desc": "AIMBOT 가성비", "price": 7000, "img": "https://i.imgur.com/7W1eg5S.png"},
 ]
 
 # ==============================
-# 디스코드 봇 (명령어 확실히 등록)
+# 디스코드 봇
 # ==============================
 intents = discord.Intents.default()
 intents.message_content = True
@@ -224,49 +256,121 @@ intents.members = True
 
 bot = commands.Bot(command_prefix=".", intents=intents)
 
+async def send_notifications(user_id: int, product_name: str, code: str, price: int, new_balance: int, is_first_purchase: bool):
+    """구매 알림 3개 채널로 전송"""
+    
+    # 1. 구매로그 채널 (익명)
+    buy_log_channel = bot.get_channel(BUY_LOG_CHANNEL_ID)
+    if buy_log_channel:
+        embed_log = discord.Embed(
+            title="🛒 구매 발생",
+            description=f"익명의 유저가 **{product_name}** 을(를) 구매했습니다.",
+            color=0x2ecc71
+        )
+        await buy_log_channel.send(embed=embed_log)
+    
+    # 2. 관리자 채널 (상세정보)
+    admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
+    if admin_channel:
+        embed_admin = discord.Embed(
+            title="✅ 구매 상세정보",
+            description=f"**유저 ID:** `{user_id}`\n"
+                        f"**상품명:** {product_name}\n"
+                        f"**발급 코드:** `{code}`\n"
+                        f"**차감 포인트:** {price:,}P\n"
+                        f"**남은 포인트:** {new_balance:,}P\n"
+                        f"**첫 구매 여부:** {'✅ 첫 구매' if is_first_purchase else '❌ 추가 구매'}",
+            color=0x2ecc71
+        )
+        await admin_channel.send(embed=embed_admin)
+
+async def update_user_role(user_id: int, is_buyer: bool):
+    """유저 역할 업데이트"""
+    if not GUILD_ID or not NON_BUYER_ROLE_ID or not BUYER_ROLE_ID:
+        return
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return
+    member = guild.get_member(user_id)
+    if not member:
+        return
+    non_buyer_role = guild.get_role(NON_BUYER_ROLE_ID)
+    buyer_role = guild.get_role(BUYER_ROLE_ID)
+    if is_buyer:
+        if non_buyer_role and non_buyer_role in member.roles:
+            await member.remove_roles(non_buyer_role)
+        if buyer_role and buyer_role not in member.roles:
+            await member.add_roles(buyer_role)
+    else:
+        if buyer_role and buyer_role in member.roles:
+            await member.remove_roles(buyer_role)
+        if non_buyer_role and non_buyer_role not in member.roles:
+            await member.add_roles(non_buyer_role)
+
 @bot.event
 async def on_ready():
-    print(f"✅ 디스코드 봇 로그인 완료: {bot.user}")
-    print(f"📋 등록된 명령어: {[cmd.name for cmd in bot.commands]}")
+    print(f"✅ 디스코드 봇 로그인: {bot.user}")
+    print(f"📋 명령어: {[cmd.name for cmd in bot.commands]}")
+    guild = bot.get_guild(GUILD_ID)
+    if guild:
+        print(f"📌 서버: {guild.name}")
 
 @bot.event
 async def on_command_error(ctx, error):
-    print(f"⚠️ 명령어 오류: {error}")
     if isinstance(error, commands.CommandNotFound):
-        await ctx.reply("❌ 존재하지 않는 명령어입니다. `.도움말` 로 확인하세요.")
+        await ctx.reply("❌ 존재하지 않는 명령어입니다. `.도움말` 확인")
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.reply("❌ 관리자 권한이 필요합니다.")
+        await ctx.reply("❌ 관리자 권한 필요")
     else:
         await ctx.reply(f"❌ 오류: {error}")
+
+# ========== 일반 명령어 ==========
+@bot.command(name="도움말")
+async def help_cmd(ctx):
+    embed = discord.Embed(title="📚 도움말", color=0x3498db)
+    embed.add_field(name="`.정보`", value="내 정보 확인", inline=False)
+    embed.add_field(name="`.레드코리아패널`", value="자판기 생성 (관리자)", inline=False)
+    embed.add_field(name="`.충전 @유저 금액`", value="포인트 충전 (관리자)", inline=False)
+    embed.add_field(name="`.코드추가 상품ID 코드`", value="코드 추가 (관리자)", inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command(name="정보")
+async def info_cmd(ctx):
+    user = ctx.author
+    points = get_points(user.id)
+    has_purchased = has_purchased_before(user.id)
+    embed = discord.Embed(title="📊 내 정보", color=0x3498db)
+    embed.add_field(name="💰 포인트", value=f"{points:,}P", inline=False)
+    embed.add_field(name="🏷️ 상태", value="✅ 구매자" if has_purchased else "❌ 비구매자", inline=False)
+    await ctx.send(embed=embed)
 
 # ========== 관리자 명령어 ==========
 @bot.command(name="충전")
 @commands.has_permissions(administrator=True)
 async def charge_cmd(ctx, member: discord.Member, amount: int):
-    """유저에게 포인트 충전 (관리자 전용)"""
     if amount <= 0:
-        await ctx.reply("❌ 0원 이상 입력하세요.")
+        await ctx.reply("❌ 0원 이상 입력")
         return
     new_balance = add_points(member.id, amount)
-    await ctx.reply(f"✅ {member.mention} 님에게 {amount:,}P 충전 완료. 현재 포인트: **{new_balance:,}P**")
+    await ctx.reply(f"✅ {member.mention} {amount:,}P 충전 완료 (잔액: {new_balance:,}P)")
 
 @bot.command(name="레드코리아패널")
 @commands.has_permissions(administrator=True)
 async def create_red_panel(ctx):
-    """일반용 자판기 패널 생성"""
+    """일반 패널 - 비구매자도 구매 가능, 충전 버튼은 구매자만"""
+    
     embed = discord.Embed(
-        title="🔴 RED KOREA - 자판기",
-        description="**버튼을 눌러 서비스를 이용하세요.**\n\n"
-                    "🛒 **구매** - 상품을 구매합니다\n"
-                    "📊 **정보** - 내 포인트와 구매내역 확인\n"
-                    "💰 **충전** - 포인트 충전 문의",
+        title="🔴 RED KOREA 자판기",
+        description="버튼을 눌러 이용하세요",
         color=0xe74c3c
     )
     
     view = discord.ui.View(timeout=None)
     
+    # 구매 버튼 (비구매자도 가능)
     async def buy_callback(interaction):
         await interaction.response.defer(ephemeral=True)
+        
         options = []
         for p in PRODUCTS:
             stock = get_code_stock(p["id"])
@@ -276,7 +380,7 @@ async def create_red_panel(ctx):
                 description=f"재고: {stock}개"
             ))
         
-        select = discord.ui.Select(placeholder="구매할 상품 선택", options=options)
+        select = discord.ui.Select(placeholder="상품 선택", options=options)
         
         async def select_callback(interaction):
             await interaction.response.defer(ephemeral=True)
@@ -284,6 +388,7 @@ async def create_red_panel(ctx):
             product = next(p for p in PRODUCTS if p["id"] == product_id)
             
             user = interaction.user
+            before_purchase = has_purchased_before(user.id)
             new_balance = remove_points(user.id, product["price"])
             
             if new_balance is None:
@@ -298,41 +403,68 @@ async def create_red_panel(ctx):
                 return
             
             insert_order(user.id, product["name"], product["price"], code)
-            await interaction.followup.send(f"✅ 구매 완료!\n상품: {product['name']}\n코드: `{code}`\n남은 포인트: {new_balance:,}P", ephemeral=True)
+            after_purchase = has_purchased_before(user.id)
+            is_first_purchase = (not before_purchase and after_purchase)
+            
+            # 역할 업데이트
+            await update_user_role(user.id, True)
+            
+            # 알림 전송
+            await send_notifications(user.id, product["name"], code, product["price"], new_balance, is_first_purchase)
+            
+            # 구매자에게 DM
+            try:
+                dm = await user.create_dm()
+                await dm.send(f"✅ 구매 완료!\n상품: {product['name']}\n코드: `{code}`\n잔액: {new_balance:,}P")
+            except:
+                pass
+            
+            await interaction.followup.send(f"✅ 구매 완료!\n코드: `{code}`\n잔액: {new_balance:,}P", ephemeral=True)
         
         select.callback = select_callback
         view_select = discord.ui.View()
         view_select.add_item(select)
-        await interaction.followup.send("📦 상품을 선택하세요:", view=view_select, ephemeral=True)
+        await interaction.followup.send("📦 상품 선택:", view=view_select, ephemeral=True)
     
+    # 정보 버튼
     async def info_callback(interaction):
         await interaction.response.defer(ephemeral=True)
         user = interaction.user
         points = get_points(user.id)
+        has_purchased = has_purchased_before(user.id)
         orders = get_user_orders(user.id, 5)
         
         embed_info = discord.Embed(title="📊 내 정보", color=0x3498db)
         embed_info.add_field(name="💰 포인트", value=f"{points:,}P", inline=False)
-        
+        embed_info.add_field(name="🏷️ 상태", value="✅ 구매자" if has_purchased else "❌ 비구매자", inline=False)
         if orders:
-            order_text = "\n".join([f"• {o['product_name']} - {o['price']:,}P ({o['created_at'][:10]})" for o in orders])
-            embed_info.add_field(name="📦 최근 구매", value=order_text[:1000], inline=False)
-        else:
-            embed_info.add_field(name="📦 구매내역", value="없음", inline=False)
-        
+            order_text = "\n".join([f"• {o['product_name']} - {o['price']:,}P" for o in orders])
+            embed_info.add_field(name="📦 최근 구매", value=order_text[:500], inline=False)
         await interaction.followup.send(embed=embed_info, ephemeral=True)
     
+    # 충전 버튼 (구매자만 계좌 노출, 비구매자는 문의 안내)
     async def charge_callback(interaction):
-        embed_charge = discord.Embed(
-            title="💰 충전 안내",
-            description="계좌: 농협 3521617659683 (김대훈)\n입금 후 관리자에게 알려주세요.",
-            color=0x27ae60
-        )
-        await interaction.response.send_message(embed=embed_charge, ephemeral=True)
+        user = interaction.user
+        is_buyer = has_purchased_before(user.id)
+        
+        if is_buyer:
+            embed_charge = discord.Embed(
+                title="💰 충전 안내",
+                description="**계좌 정보**\n🏦 농협은행\n💳 `3521617659683`\n👤 김대훈\n\n입금 후 관리자에게 알려주세요.",
+                color=0x27ae60
+            )
+            await interaction.response.send_message(embed=embed_charge, ephemeral=True)
+        else:
+            embed_charge = discord.Embed(
+                title="🔒 구매자 전용 서비스",
+                description=f"❌ 구매 이력이 없습니다.\n문의 채널: <#{INQUIRY_CHANNEL_ID}>",
+                color=0xe74c3c
+            )
+            await interaction.response.send_message(embed=embed_charge, ephemeral=True)
     
-    buy_btn = discord.ui.Button(label="🛒 구매", style=discord.ButtonStyle.primary, custom_id="buy")
-    info_btn = discord.ui.Button(label="📊 정보", style=discord.ButtonStyle.secondary, custom_id="info")
-    charge_btn = discord.ui.Button(label="💰 충전", style=discord.ButtonStyle.success, custom_id="charge")
+    buy_btn = discord.ui.Button(label="🛒 구매", style=discord.ButtonStyle.primary)
+    info_btn = discord.ui.Button(label="📊 정보", style=discord.ButtonStyle.secondary)
+    charge_btn = discord.ui.Button(label="💰 충전", style=discord.ButtonStyle.success)
     
     buy_btn.callback = buy_callback
     info_btn.callback = info_callback
@@ -348,68 +480,32 @@ async def create_red_panel(ctx):
 @bot.command(name="코드추가")
 @commands.has_permissions(administrator=True)
 async def add_code_cmd(ctx, product_id: str, *codes: str):
-    """상품 코드 추가 (관리자 전용)"""
     valid_ids = [p["id"] for p in PRODUCTS]
     if product_id not in valid_ids:
-        await ctx.reply(f"❌ 유효한 상품 ID: {', '.join(valid_ids)}")
-        return
-    if not codes:
-        await ctx.reply("❌ 추가할 코드를 입력하세요.")
+        await ctx.reply(f"❌ 유효한 ID: {', '.join(valid_ids)}")
         return
     added = 0
     for code in codes:
         if add_product_code(product_id, code.strip()):
             added += 1
-    await ctx.reply(f"✅ {added}개 추가 완료, {len(codes)-added}개 실패")
+    await ctx.reply(f"✅ {added}개 추가 완료")
 
 @bot.command(name="코드목록")
 @commands.has_permissions(administrator=True)
 async def list_codes_cmd(ctx, product_id: str = None):
-    """미사용 코드 목록 확인 (관리자 전용)"""
-    if product_id is None:
-        lines = []
-        for p in PRODUCTS:
-            codes = get_unused_codes(p["id"])
-            lines.append(f"**{p['name']}** (`{p['id']}`): {len(codes)}개")
-        await ctx.reply("\n".join(lines))
-    else:
+    if product_id:
         codes = get_unused_codes(product_id)
-        if codes:
-            await ctx.reply(f"**{product_id}** 미사용 코드 ({len(codes)}개):\n`" + "`, `".join(codes[:30]) + "`")
-        else:
-            await ctx.reply(f"**{product_id}**에 미사용 코드가 없습니다.")
-
-@bot.command(name="코드삭제")
-@commands.has_permissions(administrator=True)
-async def delete_code_cmd(ctx, *, code: str):
-    """코드 삭제 (관리자 전용)"""
-    if delete_code(code):
-        await ctx.reply(f"✅ 코드 `{code}` 삭제 완료.")
+        await ctx.reply(f"**{product_id}** 재고: {len(codes)}개")
     else:
-        await ctx.reply(f"❌ 코드 `{code}` 없음.")
-
-@bot.command(name="도움말")
-async def help_cmd(ctx):
-    """도움말 표시"""
-    embed = discord.Embed(title="📚 RED KOREA 봇 도움말", color=0x3498db)
-    embed.add_field(name="`.도움말`", value="이 도움말을 표시합니다", inline=False)
-    embed.add_field(name="`.레드코리아패널`", value="자판기 패널 생성 (관리자)", inline=False)
-    embed.add_field(name="`.충전 @유저 금액`", value="포인트 충전 (관리자)", inline=False)
-    embed.add_field(name="`.코드추가 상품ID 코드`", value="상품 코드 추가 (관리자)", inline=False)
-    embed.add_field(name="`.코드목록 [상품ID]`", value="미사용 코드 목록 (관리자)", inline=False)
-    embed.add_field(name="`.코드삭제 코드`", value="코드 삭제 (관리자)", inline=False)
-    await ctx.send(embed=embed)
+        lines = [f"**{p['name']}**: {get_code_stock(p['id'])}개" for p in PRODUCTS]
+        await ctx.reply("\n".join(lines))
 
 def run_bot():
-    """봇 실행"""
     if DISCORD_TOKEN:
         try:
-            print("🤖 디스코드 봇 시작 중...")
             bot.run(DISCORD_TOKEN, reconnect=True)
         except Exception as e:
-            print(f"❌ 봇 실행 오류: {e}")
-    else:
-        print("⚠️ DISCORD_TOKEN 환경 변수가 없습니다. 봇을 실행하지 않습니다.")
+            print(f"봇 오류: {e}")
 
 # ==============================
 # Flask 라우트
@@ -441,8 +537,7 @@ def api_points():
 
 @app.route("/api/stock")
 def api_stock():
-    stocks = {p["id"]: get_code_stock(p["id"]) for p in PRODUCTS}
-    return jsonify(stocks)
+    return jsonify({p["id"]: get_code_stock(p["id"]) for p in PRODUCTS})
 
 @app.route("/api/buy", methods=["POST"])
 def api_buy():
@@ -459,20 +554,18 @@ def api_buy():
     if not product:
         return jsonify({"ok": False, "error": "상품 없음"}), 400
     
-    price = product["price"]
-    product_name = product["name"]
-    
-    new_balance = remove_points(user_id, price)
+    new_balance = remove_points(user_id, product["price"])
     if new_balance is None:
         current = get_points(user_id)
-        return jsonify({"ok": False, "error": f"포인트 부족 (필요: {price:,}P / 보유: {current:,}P)"}), 400
+        return jsonify({"ok": False, "error": f"포인트 부족 (필요: {product['price']:,}P / 보유: {current:,}P)"}), 400
     
     code = get_unused_code(product_id)
     if code is None:
-        add_points(user_id, price)
-        return jsonify({"ok": False, "error": f"재고 부족 - {product_name}"}), 400
+        add_points(user_id, product["price"])
+        return jsonify({"ok": False, "error": "재고 부족"}), 400
     
-    insert_order(user_id, product_name, price, code)
+    insert_order(user_id, product["name"], product["price"], code)
+    
     return jsonify({"ok": True, "code": code, "new_balance": new_balance})
 
 @app.route("/api/charge-request", methods=["POST"])
@@ -559,9 +652,9 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
             flex-wrap: wrap;
             gap: 1rem;
+            margin-bottom: 2rem;
         }
         .logo { font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg,#fff,#a78bfa,#ff4b6e); -webkit-background-clip:text; background-clip:text; color:transparent; }
         .user-info { display: flex; align-items: center; gap: 1rem; background: rgba(0,0,0,0.35); padding: 0.5rem 1rem; border-radius: 60px; }
@@ -706,6 +799,7 @@ HTML_TEMPLATE = """
         fetchStock().then(() => renderProducts());
         refreshPoints();
         setInterval(refreshPoints, 30000);
+        setInterval(() => fetchStock().then(() => renderProducts()), 60000);
     }
 </script>
 </body>
@@ -736,9 +830,9 @@ ORDERS_TEMPLATE = """
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
             flex-wrap: wrap;
             gap: 1rem;
+            margin-bottom: 2rem;
         }
         .logo { font-size: 1.8rem; font-weight: 800; background: linear-gradient(135deg,#fff,#a78bfa,#ff4b6e); -webkit-background-clip:text; background-clip:text; color:transparent; }
         .user-info { display: flex; align-items: center; gap: 1rem; background: rgba(0,0,0,0.35); padding: 0.5rem 1rem; border-radius: 60px; }
@@ -779,7 +873,7 @@ ORDERS_TEMPLATE = """
         const data = await res.json();
         const container = document.getElementById('ordersList');
         if (!data.orders || data.orders.length === 0) {
-            container.innerHTML = '<p style="text-align:center;padding:2rem;">아직 구매 내역이 없습니다.</p>';
+            container.innerHTML = '<p style="text-align:center;padding:2rem;">구매 내역 없음</p>';
             return;
         }
         let html = '<table><thead><tr><th>상품명</th><th>금액</th><th>코드</th><th>구매일시</th></tr></thead><tbody>';
@@ -805,15 +899,11 @@ ORDERS_TEMPLATE = """
 # 실행
 # ==============================
 if __name__ == "__main__":
-    # 봇 스레드 실행
     if DISCORD_TOKEN:
         bot_thread = threading.Thread(target=run_bot, daemon=True)
         bot_thread.start()
-        print("🤖 봇 스레드 시작됨")
-    else:
-        print("⚠️ DISCORD_TOKEN 없음 - 봇 미실행")
+        print("🤖 봇 스레드 시작")
     
-    # Flask 서버 실행
     port = int(os.environ.get("PORT", 10000))
     print(f"🚀 Flask 서버 시작 (포트: {port})")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
